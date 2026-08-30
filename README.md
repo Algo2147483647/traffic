@@ -1,0 +1,299 @@
+# Meridian City Traffic Simulator
+
+A traffic simulation with a Go backend, a directed lane-weighted road graph,
+N-way intersection geometry and signal plans, live Server-Sent Events, and an
+interactive full-screen HTML canvas UI.
+
+## Run it
+
+Requirements: Go 1.24 or newer.
+
+```bash
+go run ./cmd/traffic -config configs/meridian-city.json -addr :8080
+```
+
+Open [http://localhost:8080](http://localhost:8080). The HTML, CSS, and
+JavaScript are embedded in the Go binary, so the application does not need a
+separate frontend process.
+
+```bash
+go test ./cmd/... ./internal/...
+go build -o traffic ./cmd/traffic
+```
+
+The optional `app/` project is a publishable version of the visualization. It
+connects to the Go service on port 8080 during local development and presents a
+self-running preview when the backend is unavailable.
+
+```bash
+npm install
+npm run dev
+npm run build
+```
+
+## Model
+
+### Intersections and transforms
+
+Each intersection vertex may have any number `N` of inbound and outbound
+approaches. A directed way `i` has `Mi` lanes. A polyline way is split into
+segments, and every segment contains exactly `Mi` lane sub-segments.
+
+World coordinates follow the canvas convention: `x` increases to the right and
+`y` increases downward. Consequently, positive signed angles turn visually to
+the right and negative signed angles turn visually to the left. This convention
+is shared by backend geometry, the embedded UI, and the publishable preview.
+
+Every segment and sub-segment exposes a homogeneous 2D local-to-world matrix:
+
+```text
+[ tx  -ty   x ]
+[ ty   tx   y ]
+[  0    0   1 ]
+```
+
+`(tx, ty)` is the unit tangent and `(x, y)` is the segment origin. Lane origins
+are offset along the tangent's normal by the configured lane width. The city
+response groups the first or last segment under the relevant intersection as
+an inbound or outbound approach.
+
+Every person snapshot also has:
+
+- a world pose matrix;
+- the nearest reference intersection and its matrix;
+- a local pose matrix relative to that intersection.
+
+### Directed graph
+
+Intersections are vertices and ways are directed edges. Edge weight is exactly
+the number of lanes. Route search operates on directed ways and permits a road
+transition only when their shared intersection contains at least one explicit
+lane-to-lane connector. Opposite directions are represented by separate ways,
+so lane counts and speed limits may be asymmetric. Paired directions receive separate
+carriageway offsets, keeping their lane centers and vehicles physically distinct.
+`driving_side` is explicit (`right` by default, or `left`). Lane indices always
+run from the driver's left to right, so lane `0` is the leftmost lane regardless
+of driving side.
+
+### Traffic control
+
+When phases are omitted, the backend derives a protected movement plan from the
+actual lane connectors through the junction. Each connector is traced along the
+same tangent-continuous cubic path used by turning vehicles. Connectors conflict
+only when those paths cross or violate lane-width clearance, or when they merge
+into the same receiving lane; approach direction and turn labels alone do not
+force separate phases. The planner finds maximal compatible connector sets and
+selects a compact, demand-weighted cover, allowing opposing flows, corner turns,
+and safe lane-separated transfers to run together at both four-way and three-way
+junctions. Green time is allocated from capacity-normalized critical flow ratios
+using Webster's cycle formula. Each generated phase has a minimum, design, and maximum green. At run
+time, independent intersection controllers measure incoming and downstream lane
+queues in a 180-unit detector zone. For every permitted movement they calculate
+the non-negative upstream-minus-downstream queue differential, sum those values
+for every feasible phase, and select the largest phase pressure. Empty approaches
+gap out and a uniquely dominant active phase can extend only to its configured
+maximum green. Equal pressures rotate deterministically in configured phase
+order. Controller state separately tracks the active, last-served, and pending
+phases. Pending selection can respond throughout clearance, is committed once
+all-red ends, and cannot immediately reselect the completed phase when another
+phase exists. Stage timers consume simulation time exactly, including steps that
+cross multiple boundaries. Every phase has amber and all-red clearance
+intervals. Vehicles wait
+until an exact `(incoming way, outgoing way, incoming lane, receiving lane)`
+connector receives green. Route planning sees the union of connectors across all
+phases, while intersection entry is restricted to connectors displayed by the
+active phase. Snapshots expose
+the current stage, countdown, demand and critical-flow scores, controller
+decision, every phase's incoming queue, outgoing queue, pressure breakdown,
+green target, lane-level movements, and planning basis; the UI highlights only
+live movements in light green. See [Max-Pressure scheduling](docs/max-pressure.md)
+for the formula, assumptions, data flow, and tie policy.
+
+Movement classification uses the signed approach-to-exit angle. The configurable
+`movement_rules` tolerances define the angular windows for through and U-turn
+movements; everything else is classified by its signed left/right direction.
+Every movement contains an explicit `lane_connections` list of
+`{from_lane,to_lane}` paths. Generated through movements use every approach lane
+and partition all receiving lanes into monotone, contiguous mappings, avoiding
+crossing connectors. A generated left or right turn starts at its corresponding
+edge lane and may safely fan into every downstream lane, allowing the connector
+to select a lane compatible with the next route movement. Explicit plans can
+provide their own exact connection list; omitted lists are derived from their
+declared lane sets. Invalid, duplicate, uncovered, or out-of-range connections
+are rejected during loading. U-turns use the median-side lane for the configured
+driving side.
+
+### Controller efficiency test
+
+`traffic-bench` runs the legacy arbitrary fixed-time plan, fixed Webster plan,
+and actuated Webster plan against three identical seeded copies of the city,
+then emits machine-readable JSON:
+
+```bash
+go run ./cmd/traffic-bench -duration 360 -step 0.1
+```
+
+The benchmark reports cumulative vehicle and signal delay, signal stops and
+releases, completed trips, throughput, and current/maximum signal queue. The
+same seeded Meridian demand is also protected by a regression test that requires
+the adaptive controller to reduce signal delay without reducing completed trips,
+while keeping peak queue within 10% of the fixed-time baseline. The bounded
+queue allowance avoids treating additional traffic delivered to downstream
+signals as a regression when adaptive control increases completed throughput.
+
+### Wall-clock congestion observation
+
+`traffic-observe` runs the live ticker for an exact real-time observation
+window and samples immutable simulation snapshots throughout the run. The JSON
+report attributes delay and queues to intersections, lane-to-lane movements,
+and directed ways, and includes a ten-real-second timeline for checking how
+congestion develops:
+
+```bash
+go run ./cmd/traffic-observe \
+  -duration 120s \
+  -time-scale 4 \
+  -sample-interval 1s \
+  -output artifacts/traffic-observation-120s-4x.json
+```
+
+The report records both requested and actual wall time, simulated time advanced,
+the achieved time scale, population and throughput, direct signal delay, phase
+changes and controller decisions, downstream queues, movement pressure, and
+road-level stopped vehicle-seconds.
+
+### Door-to-door trips
+
+Origins and destinations are independently sampled from a seeded uniform random
+distribution covering the complete configured bounds. Each person receives both
+points at trip creation, walks to the nearest physical lane, and becomes a
+vehicle. A directed shortest-time path leads to the destination's nearest lane.
+The person leaves that lane before the final intersection, becomes a pedestrian
+again, and walks to the exact destination. Arrivals remain visible briefly
+before a new random trip begins. Meridian starts as a closed 320-person system
+(`spawn_rate_per_second: 0`) so its default workload is stationary; positive
+spawn rates remain available through configuration or the load-control API for
+deliberate ramp and overload tests.
+
+Drivers are grouped by `(way, lane)` and ordered by distance along the way on
+every tick. A follower reduces speed or waits when the leading vehicle would
+violate `safe_gap + vehicle_size`. `safe_gap` can be changed live from the CITY
+overlay or API. At an intersection, deterministic routing
+follows the precomputed route while also obeying the intersection signal plan.
+
+On multi-lane roads, vehicles plan adjacent-lane maneuvers dynamically. Required
+turn and destination lanes take priority; otherwise a vehicle may pass a slow or
+blocked leader when the neighboring lane has safe front and rear gaps. A lane
+change follows a smooth time-based lateral path, reserves both source and target
+lanes for car-following, and is exposed as `lane_position` plus `lane_change` in
+person snapshots. Near an intersection, opportunistic passing is suppressed so
+vehicles remain in a lane compatible with their next route movement.
+
+The edge-to-edge canvas supports mouse or touch dragging, cursor-centered wheel zoom,
+pinch-to-zoom, dedicated zoom controls, fit-to-city, and browser full-screen
+mode. The camera range is 3%–6400% of the fitted city view. Lane boundaries,
+direction arrows, turn-lane markings, stop lines, signal lamps, ramp gore
+hatching, cubic lane connectors, and vehicle bodies all use world units, so
+they scale together. Junction surfaces are approach-shaped polygons instead of
+generic circles.
+
+## JSON input
+
+The included [Meridian Hierarchy configuration](configs/meridian-city.json)
+defines 21 named intersections and 48 long directed ways. Four neighborhood
+trees feed collectors, then curved ramps, and finally four-lane cross-city
+arterials; local streets never connect directly to the central exchange.
+
+Minimal shape:
+
+```json
+{
+  "name": "Example City",
+  "driving_side": "right",
+  "movement_rules": {
+    "through_tolerance_degrees": 40,
+    "u_turn_tolerance_degrees": 35
+  },
+  "bounds": { "min_x": 0, "min_y": 0, "max_x": 800, "max_y": 600 },
+  "simulation": {
+    "people": 240,
+    "spawn_rate_per_second": 1.5,
+    "max_people": 900,
+    "tick_ms": 50,
+    "walk_speed": 24,
+    "drive_speed": 90,
+    "safe_gap": 16
+  },
+  "intersections": [
+    { "id": "A", "name": "Alpha", "position": { "x": 100, "y": 300 } },
+    {
+      "id": "B",
+      "name": "Beta",
+      "position": { "x": 700, "y": 300 },
+      "traffic_control": {
+        "offset_seconds": 2,
+        "phases": [
+          {
+            "id": "westbound",
+            "name": "Westbound through",
+            "duration_seconds": 10,
+            "allowed_incoming_way_ids": ["AB"]
+          }
+        ]
+      }
+    }
+  ],
+  "ways": [
+    {
+      "id": "AB",
+      "from": "A",
+      "to": "B",
+      "lanes": 3,
+      "lane_width": 7,
+      "speed_limit": 100,
+      "road_class": "arterial",
+      "demand_weight": 2.1,
+      "points": [{ "x": 100, "y": 300 }, { "x": 700, "y": 300 }]
+    }
+  ]
+}
+```
+
+`points` is optional; a straight segment between the two intersections is used
+when it is omitted. When supplied, the first and last points must exactly match
+the referenced intersections.
+
+## HTTP API
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/health` | Health and current simulation time |
+| `GET` | `/api/city` | Graph, edges, intersections, segments, and transforms |
+| `GET` | `/api/snapshot` | People, trips, poses, reference matrices, live signals, and flow stats |
+| `GET` | `/api/stream` | `city` and `snapshot` Server-Sent Events |
+| `POST` | `/api/control` | Pause, resume, step, reset, change time scale/load, or set vehicle spacing |
+
+Control examples:
+
+```json
+{ "action": "pause" }
+{ "action": "step", "delta": 0.05 }
+{ "action": "reset", "population": 120 }
+{ "action": "set_time_scale", "time_scale": 2 }
+{ "action": "set_load", "population": 500, "spawn_rate_per_second": 4, "max_population": 1200 }
+{ "action": "set_spacing", "safe_gap": 34 }
+```
+
+## Project layout
+
+```text
+cmd/traffic/                 executable entry point
+cmd/traffic-bench/           seeded fixed-time/adaptive A/B benchmark
+cmd/traffic-observe/         real-time congestion observer and JSON report
+configs/                     JSON city inputs
+internal/model/              graph, intersection, segment, and matrix model
+internal/sim/                spawning, walking, driving, queuing, snapshots
+internal/server/             HTTP/SSE API and embedded HTML UI
+internal/server/web/         standalone HTML, CSS, and canvas renderer
+app/                         publishable visualization surface
+```
