@@ -93,7 +93,9 @@ the non-negative upstream-minus-downstream queue differential, sum those values
 for every feasible phase, and select the largest phase pressure. Empty approaches
 gap out and a uniquely dominant active phase can extend only to its configured
 maximum green. Equal pressures rotate deterministically in configured phase
-order. Controller state separately tracks the active, last-served, and pending
+order. A maximum-red guard forces a starved phase after one design cycle so
+sustained demand cannot permanently suppress a lower-pressure movement.
+Controller state separately tracks the active, last-served, and pending
 phases. Pending selection can respond throughout clearance, is committed once
 all-red ends, and cannot immediately reselect the completed phase when another
 phase exists. Stage timers consume simulation time exactly, including steps that
@@ -113,15 +115,17 @@ Movement classification uses the signed approach-to-exit angle. The configurable
 `movement_rules` tolerances define the angular windows for through and U-turn
 movements; everything else is classified by its signed left/right direction.
 Every movement contains an explicit `lane_connections` list of
-`{from_lane,to_lane}` paths. Generated through movements use every approach lane
-and partition all receiving lanes into monotone, contiguous mappings, avoiding
-crossing connectors. A generated left or right turn starts at its corresponding
-edge lane and may safely fan into every downstream lane, allowing the connector
-to select a lane compatible with the next route movement. Explicit plans can
-provide their own exact connection list; omitted lists are derived from their
-declared lane sets. Invalid, duplicate, uncovered, or out-of-range connections
-are rejected during loading. U-turns use the median-side lane for the configured
-driving side.
+`{from_lane,to_lane}` paths. For each generated approach, target directions are
+ordered clockwise from the driver's left to right. With at least `N-1` lanes,
+every target receives a dedicated contiguous lane block and surplus lanes
+reinforce the targets farthest from the current direction first. With fewer
+lanes, adjacent target directions are merged into balanced contiguous groups,
+keeping farther targets independent where the monotone order permits. Each
+movement collectively reaches every downstream lane. Explicit plans can provide
+their own exact connection list; omitted lists are derived from their declared
+lane sets. Invalid, duplicate, uncovered, or out-of-range connections are
+rejected during loading. Dead-end U-turns retain the median-side lane for the
+configured driving side.
 
 ### Controller efficiency test
 
@@ -167,7 +171,11 @@ road-level stopped vehicle-seconds.
 Origins and destinations are independently sampled from a seeded uniform random
 distribution covering the complete configured bounds. Each person receives both
 points at trip creation, walks to the nearest physical lane, and becomes a
-vehicle. A directed shortest-time path leads to the destination's nearest lane.
+vehicle. A capacity-aware lane-connector path leads to the destination's nearest
+lane. Planned demand raises the cost of roads approaching their storage
+capacity, so initial and recurring trips share usable alternatives instead of
+saturating one directed cycle. If the immediate downstream road later fills, a
+vehicle may replan the remaining lane-valid path around it.
 The person leaves that lane before the final intersection, becomes a pedestrian
 again, and walks to the exact destination. Arrivals remain visible briefly
 before a new random trip begins. Meridian starts as a closed 320-person system
@@ -176,9 +184,10 @@ spawn rates remain available through configuration or the load-control API for
 deliberate ramp and overload tests.
 
 Drivers are grouped by `(way, lane)` and ordered by distance along the way on
-every tick. A follower reduces speed or waits when the leading vehicle would
-violate `safe_gap + vehicle_size`. `safe_gap` can be changed live from the CITY
-overlay or API. At an intersection, deterministic routing
+every tick. A moving follower reduces speed or waits when the leading vehicle
+would violate `safe_gap + vehicle_size`; a stopped queue compacts to a two-unit
+bumper gap so storage vacancies can propagate through congestion. `safe_gap`
+can be changed live from the CITY overlay or API. At an intersection, deterministic routing
 follows the precomputed route while also obeying the intersection signal plan.
 
 On multi-lane roads, vehicles plan adjacent-lane maneuvers dynamically. Required

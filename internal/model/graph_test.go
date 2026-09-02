@@ -187,7 +187,7 @@ func TestGeneratedSignalPlanUsesProtectedMovementsDemandAndClearance(t *testing.
 	if !control.Generated || len(control.Phases) < 4 {
 		t.Fatalf("expected generated protected plan, got %+v", control)
 	}
-	if !control.Adaptive || control.TimingMethod == "" || control.LostTime <= 0 || control.VolumeRatio <= 0 {
+	if !control.Adaptive || control.TimingMethod == "" || control.LostTime <= 0 || control.VolumeRatio <= 0 || control.MaxRedSeconds != control.CycleSeconds {
 		t.Fatalf("generated plan lacks optimized controller metadata: %+v", control)
 	}
 	maxArterial, maxLocal := 0.0, 0.0
@@ -224,10 +224,9 @@ func TestGeneratedSignalPlanUsesProtectedMovementsDemandAndClearance(t *testing.
 				continue
 			}
 			targets := make(map[int]bool)
-			for _, fromLane := range lanesForTurn(incoming.Lanes, turn, graph.DrivingSide) {
+			for fromLane := 0; fromLane < incoming.Lanes; fromLane++ {
 				movement, ok := control.Movement(incoming.ID, outgoing.ID, fromLane)
 				if !ok {
-					t.Errorf("movement source lane %d has no connector for %s -> %s", fromLane, incoming.ID, outgoing.ID)
 					continue
 				}
 				for _, target := range movement.TargetLanes(fromLane) {
@@ -283,6 +282,70 @@ func TestGeneratedLaneConnectionsCoverBothRoadsWithoutCrossing(t *testing.T) {
 				t.Fatalf("%d -> %d topology does not cover every lane: %+v", fromCount, toCount, connections)
 			}
 		}
+	}
+}
+
+func TestApproachLaneAllocationFollowsClockwiseDistanceRules(t *testing.T) {
+	rules := MovementRulesConfig{ThroughToleranceDegrees: 5, UTurnToleranceDegrees: 5}
+	wantOrder := []string{"left-near", "left-far", "right-far", "right-near"}
+	tests := []struct {
+		name      string
+		lanes     int
+		wantLanes [][]int
+	}{
+		{name: "scarce balanced merge", lanes: 2, wantLanes: [][]int{{0}, {0}, {1}, {1}}},
+		{name: "scarce far priority", lanes: 3, wantLanes: [][]int{{0}, {1}, {2}, {2}}},
+		{name: "one dedicated lane each", lanes: 4, wantLanes: [][]int{{0}, {1}, {2}, {3}}},
+		{name: "surplus reinforces far directions", lanes: 6, wantLanes: [][]int{{0}, {1, 2}, {3, 4}, {5}}},
+		{name: "double dedicated lanes", lanes: 8, wantLanes: [][]int{{0, 1}, {2, 3}, {4, 5}, {6, 7}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			from, outgoing := radialLaneAllocationWays(test.lanes)
+			movements := makeApproachMovements(from, outgoing, rules, DrivingSideRight)
+			if len(movements) != len(wantOrder) {
+				t.Fatalf("movements = %d, want %d", len(movements), len(wantOrder))
+			}
+			for index, movement := range movements {
+				if movement.ToWayID != wantOrder[index] {
+					t.Errorf("target %d = %s, want clockwise target %s", index, movement.ToWayID, wantOrder[index])
+				}
+				if !equalInts(movement.FromLanes, test.wantLanes[index]) {
+					t.Errorf("target %s lanes = %v, want %v", movement.ToWayID, movement.FromLanes, test.wantLanes[index])
+				}
+				targetLanes := make(map[int]bool)
+				for _, connection := range movement.LaneConnections {
+					targetLanes[connection.ToLane] = true
+				}
+				if len(targetLanes) != len(movement.ToLanes) {
+					t.Errorf("target %s reaches %d receiving lanes through %+v", movement.ToWayID, len(targetLanes), movement.LaneConnections)
+				}
+			}
+		})
+	}
+}
+
+func radialLaneAllocationWays(incomingLanes int) (*Way, []*Way) {
+	center := Vec2{}
+	from := straightLaneAllocationWay("in", "origin", "center", Vec2{X: -100}, center, incomingLanes)
+	target := func(id string, degrees float64) *Way {
+		angle := degrees * math.Pi / 180
+		end := Vec2{X: 100 * math.Cos(angle), Y: 100 * math.Sin(angle)}
+		return straightLaneAllocationWay(id, "center", id, center, end, 2)
+	}
+	// Deliberately shuffled: allocation must use geometry rather than way IDs or
+	// configuration order.
+	return from, []*Way{
+		target("right-near", 120), target("left-far", -40),
+		target("left-near", -120), target("right-far", 40),
+	}
+}
+
+func straightLaneAllocationWay(id, from, to string, start, end Vec2, lanes int) *Way {
+	length := end.Sub(start).Length()
+	return &Way{
+		ID: id, From: from, To: to, Lanes: lanes, LaneWidth: 4,
+		Length: length, Points: []Vec2{start, end}, cumulative: []float64{0, length},
 	}
 }
 

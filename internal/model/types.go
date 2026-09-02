@@ -218,9 +218,9 @@ type TrafficControl struct {
 	Adaptive      bool                 `json:"adaptive"`
 	LostTime      float64              `json:"lost_time_seconds"`
 	VolumeRatio   float64              `json:"design_volume_ratio"`
-	// MaxRedSeconds is retained in the JSON contract for compatibility with
-	// earlier city snapshots. Differential-queue max-pressure scheduling leaves
-	// it at zero and uses deterministic cyclic ordering only to resolve ties.
+	// MaxRedSeconds bounds phase starvation in generated max-pressure plans.
+	// Explicit fixed-time plans leave it at zero because their configured cycle
+	// already provides the red-time bound.
 	MaxRedSeconds float64 `json:"max_red_seconds"`
 }
 

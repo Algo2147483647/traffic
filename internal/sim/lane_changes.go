@@ -90,8 +90,20 @@ func (s *Simulation) planLaneChangesLocked() {
 		if s.graph.DrivingSide == model.DrivingSideLeft {
 			passingLane = person.lane + 1
 		}
+		var routeLanes []int
+		if len(person.routeLanes) == len(person.route) {
+			routeLanes = []int{person.routeLanes[person.routeIndex]}
+		} else if person.routeIndex+1 < len(person.route) {
+			routeLanes = movementLanes(s.graph.Intersections[way.To].TrafficControl, way.ID, person.route[person.routeIndex+1])
+		}
 		for _, candidate := range candidates {
 			if candidate < 0 || candidate >= way.Lanes || !s.laneChangeSafe(person, candidate) {
+				continue
+			}
+			// An intermediate road lane that cannot serve the next route
+			// movement is not a safe overtaking lane: a dense queue may make
+			// the required merge back impossible before the stop line.
+			if len(routeLanes) > 0 && !laneIn(routeLanes, candidate) {
 				continue
 			}
 			if constrained && routeDistance <= preparationDistance*1.5 && absInt(candidate-routeLane) > difference {
@@ -130,6 +142,9 @@ func (s *Simulation) routeLaneTarget(person *personState, way *model.Way) (lane 
 	if person.routeIndex == len(person.route)-1 {
 		return max(0, min(way.Lanes-1, person.destinationLane)), math.Max(0, person.destinationAlong-person.along), true
 	}
+	if len(person.routeLanes) == len(person.route) {
+		return person.routeLanes[person.routeIndex], math.Max(0, s.stopLine(way)-person.along), true
+	}
 	nextWayID := person.route[person.routeIndex+1]
 	control := s.graph.Intersections[way.To].TrafficControl
 	available := movementLanes(control, way.ID, nextWayID)
@@ -165,6 +180,15 @@ func movementLanes(control model.TrafficControl, fromWayID, toWayID string) []in
 	}
 	sort.Ints(lanes)
 	return lanes
+}
+
+func laneIn(lanes []int, target int) bool {
+	for _, lane := range lanes {
+		if lane == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Simulation) laneChangeSafe(person *personState, targetLane int) bool {
@@ -249,7 +273,11 @@ func (s *Simulation) advanceRoadVehiclesLocked(dt float64) {
 		})
 		for index := 1; index < len(people); index++ {
 			leader, follower := people[index-1], people[index]
-			freeDistance := leader.along - follower.along - s.safeGap - s.graph.Simulation.VehicleSize
+			spacing := s.minimumVehicleSpacing()
+			if leader.state == "waiting" && !leader.laneChanging {
+				spacing = s.minimumStoppedVehicleSpacing()
+			}
+			freeDistance := leader.along - follower.along - spacing
 			allowed := math.Max(0, leader.speed+freeDistance/dt)
 			constraint := constraints[follower]
 			if allowed < constraint.speed-1e-9 || (math.Abs(allowed-constraint.speed) <= 1e-9 && (constraint.leaderID == 0 || leader.id < constraint.leaderID)) {

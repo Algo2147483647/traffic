@@ -9,8 +9,10 @@ and maximum green durations; it does not affect phase ranking.
 A queue snapshot is measured once per simulation update from the 180-unit
 detector zones:
 
-- `Q_in(from, to, lane)` is the number of driving or stopped vehicles on an
-  incoming lane whose next route way is `to`.
+- `Q_in(from, to, lane, target)` is the number of driving or stopped vehicles
+  on an incoming lane whose next route way is `to` and whose lane-valid route
+  requires the displayed receiving-lane connector. Final-leg vehicles that can
+  accept any receiving lane contribute to every applicable target set.
 - `Q_out(to, lane)` is the number of driving or stopped vehicles near the start
   of an outgoing lane. This is a receiving-occupancy/spillback estimate.
 
@@ -51,7 +53,10 @@ lane while retaining connector-level conflict detection and signal permission.
 
 No demand score, phase-order bonus, or timing-plan weight is added to pressure.
 Every configured phase, including the phase just served, is evaluated at every
-decision step. The phase with the greatest pressure is selected.
+decision step. The phase with the greatest pressure is selected unless another
+phase has reached the maximum-red limit of one design cycle. The oldest overdue
+phase wins that decision, preventing two sustained high-pressure phases from
+starving every other movement and locking a closed road network.
 
 ## Timing and data flow
 
@@ -91,6 +96,8 @@ both by the same scaled delta.
   demand.
 - A completed phase cannot immediately follow itself when another phase exists;
   single-phase intersections continue to select their sole phase.
+- A phase at its maximum-red limit takes priority over higher-pressure phases;
+  equal overdue ages use the same deterministic cyclic order.
 - With no previous phase, the lowest configured phase index wins a tie.
 - A plan with no phases returns phase index `-1`; the intersection model does
   not install an adaptive runtime for it.
@@ -103,8 +110,9 @@ both by the same scaled delta.
 ## Validation
 
 `internal/sim/max_pressure_test.go` covers full phase evaluation, exact
-lane-connection targets, incoming and outgoing terms, a demand shift, downstream
-congestion, deterministic ties, empty/invalid input, and application of the new
+lane-connection targets, target-lane demand, incoming and outgoing terms, a
+demand shift, downstream congestion, deterministic ties, maximum-red fairness,
+empty/invalid input, and application of the new
 maximum at an actual signal decision boundary. `internal/sim/simulation_test.go`
 retains the seeded fixed-time/adaptive comparison, active-phase connector, and
 green-bound behavior tests. `internal/model/graph_test.go` verifies maximal safe

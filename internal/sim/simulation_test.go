@@ -94,6 +94,25 @@ func TestFollowerWaitsForVehicleAhead(t *testing.T) {
 	}
 }
 
+func TestStoppedQueueCompactsWithoutReducingMovingGap(t *testing.T) {
+	simulation := New(simulationGraph(t))
+	leader := &personState{id: 1, state: "waiting", wayID: "AB", lane: 0, along: 50, route: []string{"AB"}, destinationAlong: 90}
+	follower := &personState{id: 2, state: "driving", wayID: "AB", lane: 0, along: 36, route: []string{"AB"}, destinationAlong: 90}
+	simulation.people = []*personState{leader, follower}
+
+	simulation.advanceRoadVehiclesLocked(.1)
+	if follower.along <= 36 || follower.state != "driving" {
+		t.Fatalf("follower did not use the compact stopped-queue gap: %+v", follower)
+	}
+
+	leader.state, leader.speed, leader.along = "driving", 20, 50
+	follower.state, follower.speed, follower.along = "driving", 20, 38
+	simulation.advanceRoadVehiclesLocked(.1)
+	if follower.along != 38 || follower.state != "waiting" {
+		t.Fatalf("moving follower ignored the configured safe gap: %+v", follower)
+	}
+}
+
 func TestRuntimeVehicleSpacingIsApplied(t *testing.T) {
 	simulation := New(simulationGraph(t))
 	simulation.SetSpacing(30)
@@ -230,6 +249,46 @@ func TestIntersectionUsesFreeCompatibleReceivingLane(t *testing.T) {
 	}
 }
 
+func TestIntersectionWaitsForRouteCompatibleReceivingLane(t *testing.T) {
+	simulation := New(multiLaneGraph(t))
+	control := simulation.graph.Intersections["B"].TrafficControl
+	required := movementLanes(simulation.graph.Intersections["S"].TrafficControl, "BS", "SB")
+	if len(required) == 0 {
+		t.Fatal("generated plan omitted the next route movement from BS to SB")
+	}
+	requiredLane := required[0]
+	phaseIndex := -1
+	for index, phase := range control.Phases {
+		movement, allowed := movementForLaneInPhase(phase, "AB", "BS", 2)
+		if allowed && containsInt(movement.ToLanes, requiredLane) && len(movement.ToLanes) > 1 {
+			phaseIndex = index
+			break
+		}
+	}
+	if phaseIndex < 0 {
+		t.Fatal("generated plan omitted a split receiving-lane phase for AB to BS")
+	}
+	simulation.signals["B"].PhaseIndex, simulation.signals["B"].Stage = phaseIndex, "green"
+	nextAlong := math.Min(simulation.graph.Simulation.Intersection, simulation.graph.Ways["BS"].Length)
+	person := &personState{
+		id: 1, state: "driving", wayID: "AB", lane: 2, lanePosition: 2,
+		along: simulation.stopLine(simulation.graph.Ways["AB"]), route: []string{"AB", "BS", "SB"}, destinationLane: 0, destinationAlong: 120,
+	}
+	blocker := &personState{id: 2, state: "waiting", wayID: "BS", lane: requiredLane, lanePosition: float64(requiredLane), along: nextAlong}
+	simulation.people = []*personState{person, blocker}
+
+	simulation.transition(person)
+	if person.state != "waiting" || person.waitingReason != "downstream storage" || person.routeIndex != 0 {
+		t.Fatalf("vehicle entered a free lane incompatible with its next movement: %+v", person)
+	}
+
+	simulation.people = []*personState{person}
+	simulation.transition(person)
+	if person.state != "turning" || person.nextLane != requiredLane {
+		t.Fatalf("vehicle did not enter the route-compatible lane after storage cleared: %+v", person)
+	}
+}
+
 func TestIntersectionWaitsWhenAllReceivingLanesAreFull(t *testing.T) {
 	simulation := New(multiLaneGraph(t))
 	control := simulation.graph.Intersections["B"].TrafficControl
@@ -260,6 +319,46 @@ func TestIntersectionWaitsWhenAllReceivingLanesAreFull(t *testing.T) {
 	simulation.transition(person)
 	if person.state != "waiting" || person.waitingReason != "downstream storage" || person.routeIndex != 0 {
 		t.Fatalf("vehicle entered a full downstream road: %+v", person)
+	}
+}
+
+func TestCongestionRerouteAvoidsBlockedImmediateWay(t *testing.T) {
+	graph, err := model.BuildGraph(model.CityConfig{
+		Name: "Reroute City", Bounds: model.Bounds{MaxX: 320, MaxY: 220},
+		Simulation: model.SimulationConfig{People: 1, DriveSpeed: 20, SafeGap: 10, VehicleSize: 4, Intersection: 18},
+		Intersections: []model.IntersectionConfig{
+			{ID: "A", Position: model.Vec2{X: 10, Y: 100}},
+			{ID: "B", Position: model.Vec2{X: 90, Y: 100}},
+			{ID: "C", Position: model.Vec2{X: 160, Y: 190}},
+			{ID: "D", Position: model.Vec2{X: 230, Y: 100}},
+			{ID: "E", Position: model.Vec2{X: 310, Y: 100}},
+		},
+		Ways: []model.WayConfig{
+			{ID: "AB", From: "A", To: "B", Lanes: 1, SpeedLimit: 20},
+			{ID: "BD", From: "B", To: "D", Lanes: 1, SpeedLimit: 20},
+			{ID: "BC", From: "B", To: "C", Lanes: 1, SpeedLimit: 20},
+			{ID: "CD", From: "C", To: "D", Lanes: 1, SpeedLimit: 20},
+			{ID: "DE", From: "D", To: "E", Lanes: 1, SpeedLimit: 20},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	simulation := &Simulation{graph: graph, safeGap: graph.Simulation.SafeGap}
+	person := &personState{id: 1, state: "waiting", wayID: "AB", lane: 0, route: []string{"AB", "BD", "DE"}}
+	simulation.people = []*personState{person}
+
+	if !simulation.rerouteAroundCongestion(person, "BD") {
+		t.Fatal("blocked direct route did not produce an alternate path")
+	}
+	want := []string{"AB", "BC", "CD", "DE"}
+	if len(person.route) != len(want) {
+		t.Fatalf("rerouted path = %v, want %v", person.route, want)
+	}
+	for index := range want {
+		if person.route[index] != want[index] {
+			t.Fatalf("rerouted path = %v, want %v", person.route, want)
+		}
 	}
 }
 
@@ -368,11 +467,11 @@ func containsInt(values []int, target int) bool {
 
 func TestRoutePreparationChangesOneAdjacentLaneAtATime(t *testing.T) {
 	simulation := New(multiLaneGraph(t))
-	person := &personState{id: 1, state: "driving", wayID: "AB", lane: 2, lanePosition: 2, along: 390, speed: 20, route: []string{"AB", "BN"}, destinationAlong: 100}
+	person := &personState{id: 1, state: "driving", wayID: "AB", lane: 0, lanePosition: 0, along: 390, speed: 20, route: []string{"AB", "BS"}, destinationAlong: 100}
 	simulation.people = []*personState{person}
 
 	simulation.planLaneChangesLocked()
-	if !person.laneChanging || person.laneChangeFrom != 2 || person.laneChangeTo != 1 || person.laneChangeReason != "route preparation" {
+	if !person.laneChanging || person.laneChangeFrom != 0 || person.laneChangeTo != 1 || person.laneChangeReason != "route preparation" {
 		t.Fatalf("first route lane change was not adjacent: %+v", person)
 	}
 	simulation.advanceLaneChangesLocked(person.laneChangeDuration)
@@ -380,8 +479,8 @@ func TestRoutePreparationChangesOneAdjacentLaneAtATime(t *testing.T) {
 		t.Fatalf("first route lane change did not complete in lane 1: %+v", person)
 	}
 	simulation.planLaneChangesLocked()
-	if !person.laneChanging || person.laneChangeFrom != 1 || person.laneChangeTo != 0 {
-		t.Fatalf("second route lane change did not continue toward lane 0: %+v", person)
+	if !person.laneChanging || person.laneChangeFrom != 1 || person.laneChangeTo != 2 {
+		t.Fatalf("second route lane change did not continue toward lane 2: %+v", person)
 	}
 }
 
@@ -394,6 +493,23 @@ func TestVehicleOvertakesSlowLeaderOnPreferredPassingSide(t *testing.T) {
 	simulation.planLaneChangesLocked()
 	if !follower.laneChanging || follower.laneChangeTo != 0 || follower.laneChangeReason != "overtake" {
 		t.Fatalf("follower did not overtake into the left passing lane under right-hand traffic: %+v", follower)
+	}
+}
+
+func TestVehicleDoesNotOvertakeOutOfNextMovementLane(t *testing.T) {
+	simulation := New(multiLaneGraph(t))
+	routeLanes := movementLanes(simulation.graph.Intersections["B"].TrafficControl, "AB", "BS")
+	if len(routeLanes) != 1 {
+		t.Fatalf("right turn lanes = %v, want one required lane", routeLanes)
+	}
+	lane := routeLanes[0]
+	leader := &personState{id: 1, state: "waiting", wayID: "AB", lane: lane, lanePosition: float64(lane), along: 140, route: []string{"AB", "BS", "SB"}}
+	follower := &personState{id: 2, state: "driving", wayID: "AB", lane: lane, lanePosition: float64(lane), along: 100, speed: 20, route: []string{"AB", "BS", "SB"}}
+	simulation.people = []*personState{leader, follower}
+
+	simulation.planLaneChangesLocked()
+	if follower.laneChanging {
+		t.Fatalf("vehicle left the only lane serving its next movement to overtake: %+v", follower)
 	}
 }
 
@@ -568,6 +684,32 @@ func TestAdaptiveControllerImprovesSeededMeridianDemand(t *testing.T) {
 	throughputFloor := int(math.Floor(float64(fixedResult.CompletedTrips) * .90))
 	if adaptiveResult.CompletedTrips < throughputFloor || adaptiveResult.MaximumSignalQueue > queueLimit {
 		t.Fatalf("adaptive controller exceeded the 10%% throughput or peak-queue guardrail: fixed=%+v adaptive=%+v", fixedResult, adaptiveResult)
+	}
+}
+
+func TestMeridianRemainsLiveUnderLongRunningClosedLoad(t *testing.T) {
+	config, err := model.LoadConfig("../../configs/meridian-city.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph, err := model.BuildGraph(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	simulation := New(graph)
+	completedAt480 := 0
+	for elapsed := 0.0; elapsed < 600; elapsed += .2 {
+		simulation.Step(.2)
+		if elapsed >= 480 && completedAt480 == 0 {
+			completedAt480 = simulation.Snapshot().Performance.CompletedTrips
+		}
+	}
+	final := simulation.Snapshot()
+	if final.Performance.CompletedTrips <= completedAt480+10 {
+		t.Fatalf("closed load stopped completing trips after congestion formed: at 480s=%d final=%+v", completedAt480, final.Performance)
+	}
+	if final.Stats.Driving == 0 || final.Stats.AverageSpeed <= 0 {
+		t.Fatalf("closed load reached a zero-speed gridlock: %+v", final.Stats)
 	}
 }
 

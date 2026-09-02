@@ -68,18 +68,21 @@ func TestMeridianCityConfig(t *testing.T) {
 			}
 		}
 		for _, incoming := range graph.Incoming[id] {
+			coveredSourceLanes := make(map[int]bool)
+			hasOrdinaryTarget := false
 			for _, outgoing := range graph.Outgoing[id] {
 				turn := classifyMovement(incoming, outgoing, graph.MovementRules)
 				if turn == "u_turn" && len(graph.Outgoing[id]) > 1 {
 					continue
 				}
+				hasOrdinaryTarget = hasOrdinaryTarget || turn != "u_turn"
 				targets := make(map[int]bool)
-				for _, fromLane := range lanesForTurn(incoming.Lanes, turn, graph.DrivingSide) {
+				for fromLane := 0; fromLane < incoming.Lanes; fromLane++ {
 					movement, ok := intersection.TrafficControl.Movement(incoming.ID, outgoing.ID, fromLane)
 					if !ok {
-						t.Errorf("intersection %s movement %s -> %s leaves source lane %d disconnected", id, incoming.ID, outgoing.ID, fromLane)
 						continue
 					}
+					coveredSourceLanes[fromLane] = true
 					for _, target := range movement.TargetLanes(fromLane) {
 						targets[target] = true
 					}
@@ -87,6 +90,9 @@ func TestMeridianCityConfig(t *testing.T) {
 				if len(targets) != outgoing.Lanes {
 					t.Errorf("intersection %s movement %s -> %s collectively reaches %d of %d target lanes", id, incoming.ID, outgoing.ID, len(targets), outgoing.Lanes)
 				}
+			}
+			if hasOrdinaryTarget && len(coveredSourceLanes) != incoming.Lanes {
+				t.Errorf("intersection %s assigns only %d of %d lanes on %s", id, len(coveredSourceLanes), incoming.Lanes, incoming.ID)
 			}
 		}
 	}

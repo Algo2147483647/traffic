@@ -23,13 +23,22 @@ type MovementQueueKey struct {
 	FromLane  int
 }
 
+// TargetMovementQueueKey refines an incoming movement queue by the receiving
+// lane the vehicle needs for its following route movement. ToLane is -1 when
+// any connector target in the phase can serve the vehicle.
+type TargetMovementQueueKey struct {
+	MovementQueueKey
+	ToLane int
+}
+
 // QueueSnapshot is the scheduler's read-only view of current traffic demand.
 // Incoming contains movement-specific detector queues approaching stop lines.
 // Outgoing contains detector queues near downstream-way entrances, where they
 // represent occupancy and spillback.
 type QueueSnapshot struct {
-	Incoming map[MovementQueueKey]float64
-	Outgoing map[LaneQueueKey]float64
+	Incoming         map[MovementQueueKey]float64
+	IncomingByTarget map[TargetMovementQueueKey]float64
+	Outgoing         map[LaneQueueKey]float64
 }
 
 // MovementPressure exposes the terms used to score one permitted movement.
@@ -176,15 +185,30 @@ func movementQueueTerms(queues QueueSnapshot, movement model.TrafficMovementConf
 			continue
 		}
 		seen[lane] = true
-		laneIncoming := nonNegativeFinite(queues.Incoming[MovementQueueKey{
-			FromWayID: movement.FromWayID, ToWayID: movement.ToWayID, FromLane: lane,
-		}])
+		key := MovementQueueKey{FromWayID: movement.FromWayID, ToWayID: movement.ToWayID, FromLane: lane}
+		laneIncoming := movementTargetIncomingQueue(queues, key, movement.TargetLanes(lane))
 		laneOutgoing := targetLaneQueue(queues, movement.ToWayID, movement.TargetLanes(lane))
 		incoming += laneIncoming
 		outgoing += laneOutgoing
 		pressure += math.Max(0, laneIncoming-laneOutgoing)
 	}
 	return incoming, outgoing, pressure
+}
+
+func movementTargetIncomingQueue(queues QueueSnapshot, key MovementQueueKey, targetLanes []int) float64 {
+	if queues.IncomingByTarget == nil {
+		return nonNegativeFinite(queues.Incoming[key])
+	}
+	queue := nonNegativeFinite(queues.IncomingByTarget[TargetMovementQueueKey{MovementQueueKey: key, ToLane: -1}])
+	seen := make(map[int]bool, len(targetLanes))
+	for _, lane := range targetLanes {
+		if lane < 0 || seen[lane] {
+			continue
+		}
+		seen[lane] = true
+		queue += nonNegativeFinite(queues.IncomingByTarget[TargetMovementQueueKey{MovementQueueKey: key, ToLane: lane}])
+	}
+	return queue
 }
 
 func targetLaneQueue(queues QueueSnapshot, wayID string, targets []int) float64 {

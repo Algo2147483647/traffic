@@ -154,6 +154,7 @@ type personState struct {
 	destinationAlong   float64
 	destinationLane    int
 	route              []string
+	routeLanes         []int
 	routeIndex         int
 	wayID              string
 	lane               int
@@ -376,7 +377,9 @@ func (s *Simulation) transition(person *personState) {
 		return
 	}
 	preferredLane := person.id % next.Lanes
-	if nextIndex+1 < len(person.route) {
+	if len(person.routeLanes) == len(person.route) {
+		preferredLane = person.routeLanes[nextIndex]
+	} else if nextIndex+1 < len(person.route) {
 		preferredLane = s.laneForMovement(next.ID, person.route[nextIndex+1], person.id)
 	}
 	if nextIndex == len(person.route)-1 {
@@ -386,8 +389,24 @@ func (s *Simulation) transition(person *personState) {
 	if nextIndex == len(person.route)-1 {
 		nextAlong = math.Min(nextAlong, person.destinationAlong)
 	}
-	nextLane, entryAvailable := s.selectReceivingLane(person, next, activeMovement.TargetLanes(person.lane), preferredLane, nextAlong)
+	receivingLanes := s.routeCompatibleReceivingLanes(person, next, nextIndex, activeMovement.TargetLanes(person.lane))
+	if len(receivingLanes) == 0 {
+		if person.waitingSignal == "" {
+			s.signalStops++
+			person.signalWait = 0
+		}
+		person.state, person.speed, person.waitingSignal = "waiting", 0, intersection.ID
+		person.waitingReason = "signal"
+		return
+	}
+	nextLane, entryAvailable := s.selectReceivingLane(person, next, receivingLanes, preferredLane, nextAlong)
 	if !entryAvailable {
+		if s.rerouteAroundCongestion(person, next.ID) {
+			s.releaseSignalWait(person)
+			person.state, person.speed, person.waitingFor = "waiting", 0, 0
+			person.waitingReason = "rerouting"
+			return
+		}
 		s.releaseSignalWait(person)
 		person.state, person.speed, person.waitingFor = "waiting", 0, 0
 		person.waitingReason = "downstream storage"
@@ -617,6 +636,17 @@ func (s *Simulation) startTripLocked(person *personState) {
 		finish.Position, finish.Tangent = finish.Way.Sample(finish.Along, finish.Lane)
 		direct := start.Way.ID == finish.Way.ID && finish.Along > start.Along+1
 		connected, ok := s.graph.RouteBetweenWays(start.Way.ID, finish.Way.ID, direct)
+		var plannedLanes []int
+		if !direct && start.Way.ID != finish.Way.ID {
+			if balanced, lanes, found := s.congestionRoute(start.Way.ID, finish.Way.ID, "", -1); found {
+				connected = make([]*model.Way, len(balanced))
+				for index, wayID := range balanced {
+					connected[index] = s.graph.Ways[wayID]
+				}
+				plannedLanes = lanes
+				ok = true
+			}
+		}
 		if !ok {
 			continue
 		}
@@ -627,11 +657,15 @@ func (s *Simulation) startTripLocked(person *personState) {
 		person.origin, person.destination = origin, destination
 		person.position, person.walkTarget = origin, start.Position
 		person.exitPoint, person.destinationAlong, person.destinationLane = finish.Position, finish.Along, finish.Lane
-		person.route, person.routeIndex = route, 0
+		person.route, person.routeLanes, person.routeIndex = route, plannedLanes, 0
 		person.state, person.wayID = "walking_to_lane", ""
 		person.lane, person.along = start.Lane, start.Along
 		if len(route) > 1 {
-			person.lane = s.laneForMovement(route[0], route[1], person.id)
+			if len(person.routeLanes) == len(route) {
+				person.lane = person.routeLanes[0]
+			} else {
+				person.lane = s.laneForMovement(route[0], route[1], person.id)
+			}
 			start.Position, start.Tangent = start.Way.Sample(start.Along, person.lane)
 			person.walkTarget = start.Position
 		}

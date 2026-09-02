@@ -17,6 +17,7 @@ type signalRuntime struct {
 	PhaseIndex        int
 	LastServedPhase   int
 	SelectedPhase     int
+	PhaseRedElapsed   []float64
 	Stage             string
 	StageElapsed      float64
 	GreenTarget       float64
@@ -50,7 +51,7 @@ func (s *Simulation) initSignalsLocked() {
 		runtime := &signalRuntime{
 			PhaseIndex: active.Index, LastServedPhase: active.Index, Stage: active.Stage, StageElapsed: math.Max(0, elapsed),
 			GreenTarget: active.Phase.DurationSeconds, SelectedPhase: (active.Index + 1) % len(control.Phases),
-			PhasePressures: make([]PhasePressure, len(control.Phases)), Decision: "design green",
+			PhasePressures: make([]PhasePressure, len(control.Phases)), PhaseRedElapsed: make([]float64, len(control.Phases)), Decision: "design green",
 		}
 		s.signals[id] = runtime
 	}
@@ -74,7 +75,7 @@ func (s *Simulation) advanceSignalLocked(control model.TrafficControl, runtime *
 	if runtime == nil || len(control.Phases) == 0 || runtime.PhaseIndex < 0 || runtime.PhaseIndex >= len(control.Phases) {
 		return
 	}
-	s.refreshSignalSelection(runtime)
+	s.refreshSignalSelection(control, runtime)
 	for dt > 0 {
 		phase := control.Phases[runtime.PhaseIndex]
 		if runtime.Stage == "green" {
@@ -89,9 +90,11 @@ func (s *Simulation) advanceSignalLocked(control model.TrafficControl, runtime *
 		}
 		remaining := math.Max(0, duration-runtime.StageElapsed)
 		if remaining > dt {
+			s.advancePhaseRedElapsed(runtime, dt)
 			runtime.StageElapsed += dt
 			return
 		}
+		s.advancePhaseRedElapsed(runtime, remaining)
 		dt -= remaining
 		runtime.StageElapsed = 0
 		switch runtime.Stage {
@@ -103,28 +106,73 @@ func (s *Simulation) advanceSignalLocked(control model.TrafficControl, runtime *
 			runtime.Stage = "all_red"
 			runtime.Decision = "conflict clearance"
 		case "all_red":
+			s.refreshSignalSelection(control, runtime)
 			nextPhase := runtime.SelectedPhase
 			if nextPhase < 0 || nextPhase >= len(control.Phases) || (len(control.Phases) > 1 && nextPhase == runtime.LastServedPhase) {
 				nextPhase = selectNextMaximumPressure(runtime.PhasePressures, runtime.LastServedPhase)
 			}
+			forcedByMaxRed := phaseExceededMaximumRed(runtime, nextPhase, control.MaxRedSeconds)
 			runtime.PhaseIndex = nextPhase
+			if nextPhase >= 0 && nextPhase < len(runtime.PhaseRedElapsed) {
+				runtime.PhaseRedElapsed[nextPhase] = 0
+			}
 			runtime.Stage = "green"
 			next := control.Phases[runtime.PhaseIndex]
 			runtime.GreenTarget = next.DurationSeconds
-			runtime.Decision = "pressure-selected green"
+			if forcedByMaxRed {
+				runtime.Decision = "maximum-red green"
+			} else {
+				runtime.Decision = "pressure-selected green"
+			}
 		}
-		s.refreshSignalSelection(runtime)
+		s.refreshSignalSelection(control, runtime)
 	}
 }
 
-func (s *Simulation) refreshSignalSelection(runtime *signalRuntime) {
+func (s *Simulation) advancePhaseRedElapsed(runtime *signalRuntime, dt float64) {
+	if dt <= 0 {
+		return
+	}
+	for index := range runtime.PhaseRedElapsed {
+		if index == runtime.PhaseIndex && runtime.Stage == "green" {
+			runtime.PhaseRedElapsed[index] = 0
+			continue
+		}
+		runtime.PhaseRedElapsed[index] += dt
+	}
+}
+
+func (s *Simulation) refreshSignalSelection(control model.TrafficControl, runtime *signalRuntime) {
 	runtime.ActivePressure = phasePressureAt(runtime.PhasePressures, runtime.PhaseIndex)
 	runtime.CompetingPressure = maxOtherPressure(runtime.PhasePressures, runtime.PhaseIndex)
 	served := runtime.PhaseIndex
 	if runtime.Stage != "green" {
 		served = runtime.LastServedPhase
 	}
-	runtime.SelectedPhase = selectNextMaximumPressure(runtime.PhasePressures, served)
+	runtime.SelectedPhase = selectNextPhase(runtime.PhasePressures, served, runtime.PhaseRedElapsed, control.MaxRedSeconds)
+}
+
+func selectNextPhase(evaluations []PhasePressure, justServed int, redElapsed []float64, maxRed float64) int {
+	selected, oldest := -1, 0.0
+	if maxRed > 0 {
+		for index := range evaluations {
+			if index == justServed || index >= len(redElapsed) || redElapsed[index]+pressureEpsilon < maxRed {
+				continue
+			}
+			if selected < 0 || redElapsed[index] > oldest+pressureEpsilon ||
+				(math.Abs(redElapsed[index]-oldest) <= pressureEpsilon && tieRank(index, justServed, len(evaluations)) < tieRank(selected, justServed, len(evaluations))) {
+				selected, oldest = index, redElapsed[index]
+			}
+		}
+	}
+	if selected >= 0 {
+		return selected
+	}
+	return selectNextMaximumPressure(evaluations, justServed)
+}
+
+func phaseExceededMaximumRed(runtime *signalRuntime, phase int, maxRed float64) bool {
+	return maxRed > 0 && phase >= 0 && phase < len(runtime.PhaseRedElapsed) && runtime.PhaseRedElapsed[phase]+pressureEpsilon >= maxRed
 }
 
 func (s *Simulation) setAdaptiveGreenTarget(control model.TrafficControl, runtime *signalRuntime, phase model.TrafficPhaseConfig) {
@@ -191,8 +239,9 @@ func phasePressureAt(pressures []PhasePressure, index int) float64 {
 // controller react before they reach a red indication.
 func (s *Simulation) signalQueuesLocked() QueueSnapshot {
 	queues := QueueSnapshot{
-		Incoming: make(map[MovementQueueKey]float64),
-		Outgoing: make(map[LaneQueueKey]float64),
+		Incoming:         make(map[MovementQueueKey]float64),
+		IncomingByTarget: make(map[TargetMovementQueueKey]float64),
+		Outgoing:         make(map[LaneQueueKey]float64),
 	}
 	for _, person := range s.people {
 		if (person.state != "driving" && person.state != "waiting") || person.wayID == "" {
@@ -213,7 +262,17 @@ func (s *Simulation) signalQueuesLocked() QueueSnapshot {
 			continue
 		}
 		toWayID := person.route[person.routeIndex+1]
-		queues.Incoming[MovementQueueKey{FromWayID: from.ID, ToWayID: toWayID, FromLane: person.lane}]++
+		key := MovementQueueKey{FromWayID: from.ID, ToWayID: toWayID, FromLane: person.lane}
+		queues.Incoming[key]++
+		targetLane := -1
+		if person.routeIndex+2 < len(person.route) {
+			if len(person.routeLanes) == len(person.route) {
+				targetLane = person.routeLanes[person.routeIndex+1]
+			} else {
+				targetLane = s.laneForMovement(toWayID, person.route[person.routeIndex+2], person.id)
+			}
+		}
+		queues.IncomingByTarget[TargetMovementQueueKey{MovementQueueKey: key, ToLane: targetLane}]++
 	}
 	return queues
 }

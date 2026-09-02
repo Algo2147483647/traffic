@@ -6,7 +6,7 @@ import (
 	"sort"
 )
 
-const generatedPlanBasis = "maximal conflict-free lane movement sets from geometric connector paths; Webster green bounds with differential-queue max-pressure scheduling"
+const generatedPlanBasis = "clockwise distance-prioritized lane allocation; maximal conflict-free geometric connector sets; Webster green bounds with differential-queue max-pressure scheduling"
 
 type phaseDraft struct {
 	phase TrafficPhaseConfig
@@ -71,13 +71,7 @@ func planTrafficControl(intersection *Intersection, input TrafficControlConfig, 
 				if from == nil {
 					return TrafficControl{}, fmt.Errorf("intersection %q phase %q allows non-incoming way %q", intersection.ID, phase.ID, fromID)
 				}
-				for _, to := range outgoing {
-					turn := classifyMovement(from, to, rules)
-					if turn == "u_turn" && len(outgoing) > 1 {
-						continue
-					}
-					phase.AllowedMovements = append(phase.AllowedMovements, makeMovement(from, to, turn, drivingSide))
-				}
+				phase.AllowedMovements = append(phase.AllowedMovements, makeApproachMovements(from, outgoing, rules, drivingSide)...)
 			}
 		}
 		phase.AllowedIncoming = nil
@@ -143,6 +137,9 @@ func planTrafficControl(intersection *Intersection, input TrafficControlConfig, 
 			return TrafficControl{}, fmt.Errorf("intersection %q traffic plan permanently blocks incoming way %q", intersection.ID, way.ID)
 		}
 	}
+	if generated {
+		control.MaxRedSeconds = control.CycleSeconds
+	}
 	return control, nil
 }
 
@@ -167,12 +164,8 @@ func generateTrafficPhases(intersection *Intersection, incoming, outgoing []*Way
 	// an otherwise unused receiving lane.
 	var movements []TrafficMovementConfig
 	for _, from := range incoming {
-		for _, to := range outgoing {
-			turn := classifyMovement(from, to, rules)
-			if turn == "u_turn" && len(outgoing) > 1 {
-				continue
-			}
-			movements = append(movements, splitMovementConnectors(makeMovement(from, to, turn, drivingSide))...)
+		for _, movement := range makeApproachMovements(from, outgoing, rules, drivingSide) {
+			movements = append(movements, splitMovementConnectors(movement)...)
 		}
 	}
 	if len(movements) == 0 {
@@ -780,11 +773,7 @@ func classLabel(class string) string {
 }
 
 func classifyMovement(from, to *Way, rules MovementRulesConfig) string {
-	_, incoming := from.Sample(math.Max(0, from.Length-1), 0)
-	_, outgoing := to.Sample(math.Min(1, to.Length), 0)
-	dot := incoming.X*outgoing.X + incoming.Y*outgoing.Y
-	cross := incoming.X*outgoing.Y - incoming.Y*outgoing.X
-	angle := math.Atan2(cross, dot)
+	angle := movementAngle(from, to)
 	throughTolerance := rules.ThroughToleranceDegrees * math.Pi / 180
 	uTurnTolerance := rules.UTurnToleranceDegrees * math.Pi / 180
 	if math.Pi-math.Abs(angle) <= uTurnTolerance {
@@ -794,10 +783,183 @@ func classifyMovement(from, to *Way, rules MovementRulesConfig) string {
 		return "through"
 	}
 	// World Y grows downward, so negative signed angles turn visually left.
-	if cross < 0 {
+	if angle < 0 {
 		return "left"
 	}
 	return "right"
+}
+
+func movementAngle(from, to *Way) float64 {
+	_, incoming := from.Sample(math.Max(0, from.Length-1), 0)
+	_, outgoing := to.Sample(math.Min(1, to.Length), 0)
+	dot := incoming.X*outgoing.X + incoming.Y*outgoing.Y
+	cross := incoming.X*outgoing.Y - incoming.Y*outgoing.X
+	return math.Atan2(cross, dot)
+}
+
+type approachMovementTarget struct {
+	way      *Way
+	turn     string
+	angle    float64
+	distance int
+}
+
+// makeApproachMovements assigns the complete set of movements for one
+// approach at once. Lane zero is the driver's leftmost lane. Target directions
+// are therefore ordered by signed angle from visual left to right, which is
+// clockwise in the simulator's screen-oriented coordinate system.
+func makeApproachMovements(from *Way, outgoing []*Way, rules MovementRulesConfig, drivingSide string) []TrafficMovementConfig {
+	targets := make([]approachMovementTarget, 0, len(outgoing))
+	for _, to := range outgoing {
+		turn := classifyMovement(from, to, rules)
+		if turn == "u_turn" && len(outgoing) > 1 {
+			continue
+		}
+		targets = append(targets, approachMovementTarget{
+			way: to, turn: turn, angle: movementAngle(from, to),
+		})
+	}
+	sort.Slice(targets, func(i, j int) bool {
+		if math.Abs(targets[i].angle-targets[j].angle) > 1e-9 {
+			return targets[i].angle < targets[j].angle
+		}
+		return targets[i].way.ID < targets[j].way.ID
+	})
+	// A dead-end reversal is not one of the N-1 destination directions covered
+	// by the allocation rule. Keep the conventional median-side U-turn lane.
+	if len(targets) == 1 && targets[0].turn == "u_turn" {
+		return []TrafficMovementConfig{makeMovement(from, targets[0].way, targets[0].turn, drivingSide)}
+	}
+
+	// The current approach occupies the omitted position at the circular-order
+	// boundary. Counting steps in either direction gives the requested
+	// topological distance without letting irregular geometric angles bias it.
+	directionCount := len(targets) + 1
+	for index := range targets {
+		clockwiseSteps := index + 1
+		targets[index].distance = min(clockwiseSteps, directionCount-clockwiseSteps)
+	}
+	lanesByTarget := assignApproachTargetLanes(targets, from.Lanes)
+	movements := make([]TrafficMovementConfig, 0, len(targets))
+	for index, target := range targets {
+		fromLanes := lanesByTarget[index]
+		toLanes := lanesForMovementExit(target.way.Lanes, target.turn, drivingSide)
+		movements = append(movements, TrafficMovementConfig{
+			FromWayID: from.ID, ToWayID: target.way.ID, FromLanes: fromLanes, ToLanes: toLanes,
+			LaneConnections: connectLaneSets(fromLanes, toLanes), Turn: target.turn,
+			DemandScore: movementDemand(from, target.turn, len(fromLanes)),
+		})
+	}
+	return movements
+}
+
+// assignApproachTargetLanes implements the three allocation regimes:
+// dedicated lanes when supply is sufficient, far-direction-first reinforcement
+// for surplus lanes, and balanced contiguous direction groups when lanes are
+// scarce. Contiguous groups preserve monotone left-to-right movement order.
+func assignApproachTargetLanes(targets []approachMovementTarget, laneCount int) [][]int {
+	assignments := make([][]int, len(targets))
+	if len(targets) == 0 || laneCount <= 0 {
+		return assignments
+	}
+	if laneCount >= len(targets) {
+		lanesPerTarget := laneCount / len(targets)
+		extra := laneCount % len(targets)
+		quotas := make([]int, len(targets))
+		for index := range quotas {
+			quotas[index] = lanesPerTarget
+		}
+		priority := make([]int, len(targets))
+		for index := range priority {
+			priority[index] = index
+		}
+		sort.SliceStable(priority, func(i, j int) bool {
+			return targets[priority[i]].distance > targets[priority[j]].distance
+		})
+		for index := 0; index < extra; index++ {
+			quotas[priority[index]]++
+		}
+		lane := 0
+		for target, quota := range quotas {
+			for count := 0; count < quota; count++ {
+				assignments[target] = append(assignments[target], lane)
+				lane++
+			}
+		}
+		return assignments
+	}
+
+	groupSizes := balancedDirectionGroupSizes(targets, laneCount)
+	target := 0
+	for lane, groupSize := range groupSizes {
+		for count := 0; count < groupSize; count++ {
+			assignments[target] = append(assignments[target], lane)
+			target++
+		}
+	}
+	return assignments
+}
+
+// balancedDirectionGroupSizes partitions the clockwise target order into
+// contiguous groups whose sizes differ by at most one. When more than one such
+// partition exists, its cost places the larger (merged) groups on directions
+// with the lowest circular distance, leaving farther directions as independent
+// as the monotone lane order permits.
+func balancedDirectionGroupSizes(targets []approachMovementTarget, laneCount int) []int {
+	small := len(targets) / laneCount
+	largeGroups := len(targets) % laneCount
+	type state struct {
+		group     int
+		largeUsed int
+	}
+	type result struct {
+		cost  int
+		sizes []int
+		ok    bool
+	}
+	memo := make(map[state]result)
+	var solve func(group, largeUsed int) result
+	solve = func(group, largeUsed int) result {
+		key := state{group: group, largeUsed: largeUsed}
+		if cached, ok := memo[key]; ok {
+			return cached
+		}
+		if group == laneCount {
+			answer := result{ok: largeUsed == largeGroups}
+			memo[key] = answer
+			return answer
+		}
+		best := result{}
+		for _, size := range []int{small, small + 1} {
+			usesLarge := 0
+			if size == small+1 {
+				usesLarge = 1
+			}
+			nextLarge := largeUsed + usesLarge
+			if nextLarge > largeGroups || laneCount-group-1 < largeGroups-nextLarge {
+				continue
+			}
+			start := group*small + largeUsed
+			end := start + size
+			if end > len(targets) {
+				continue
+			}
+			tail := solve(group+1, nextLarge)
+			if !tail.ok {
+				continue
+			}
+			cost := tail.cost
+			for index := start; index < end; index++ {
+				cost += (size - 1) * targets[index].distance
+			}
+			if !best.ok || cost < best.cost {
+				best = result{cost: cost, sizes: append([]int{size}, tail.sizes...), ok: true}
+			}
+		}
+		memo[key] = best
+		return best
+	}
+	return solve(0, 0).sizes
 }
 
 func makeMovement(from, to *Way, turn, drivingSide string) TrafficMovementConfig {

@@ -97,6 +97,33 @@ func TestMaxPressureCountsSplitReceivingConnectorsOnce(t *testing.T) {
 	}
 }
 
+func TestMaxPressureCountsDemandOnlyForItsRequiredReceivingLane(t *testing.T) {
+	key := MovementQueueKey{FromWayID: "in", ToWayID: "out", FromLane: 0}
+	control := model.TrafficControl{Phases: []model.TrafficPhaseConfig{
+		{ID: "lane-0", AllowedMovements: []model.TrafficMovementConfig{{
+			FromWayID: "in", ToWayID: "out", FromLanes: []int{0}, ToLanes: []int{0},
+			LaneConnections: []model.LaneConnectionConfig{{FromLane: 0, ToLane: 0}},
+		}}},
+		{ID: "lane-1", AllowedMovements: []model.TrafficMovementConfig{{
+			FromWayID: "in", ToWayID: "out", FromLanes: []int{0}, ToLanes: []int{1},
+			LaneConnections: []model.LaneConnectionConfig{{FromLane: 0, ToLane: 1}},
+		}}},
+	}}
+	queues := QueueSnapshot{
+		Incoming: map[MovementQueueKey]float64{key: 9},
+		IncomingByTarget: map[TargetMovementQueueKey]float64{
+			{MovementQueueKey: key, ToLane: -1}: 2,
+			{MovementQueueKey: key, ToLane: 1}:  7,
+		},
+		Outgoing: make(map[LaneQueueKey]float64),
+	}
+
+	decision := (MaxPressureScheduler{}).Evaluate(control, queues, -1)
+	if decision.Phases[0].IncomingQueue != 2 || decision.Phases[1].IncomingQueue != 9 || decision.PhaseIndex != 1 {
+		t.Fatalf("target-lane demand was assigned to a phase that cannot serve it: %+v", decision)
+	}
+}
+
 func TestMaxPressureTieAndEmptyDemandAreDeterministic(t *testing.T) {
 	control := maxPressureTestControl()
 	scheduler := MaxPressureScheduler{}
@@ -130,6 +157,18 @@ func TestNextPhaseCannotImmediatelyReselectCompletedGreen(t *testing.T) {
 	}
 	if got := selectNextMaximumPressure(evaluations[:1], 0); got != 0 {
 		t.Fatalf("single-phase controller selected %d, want 0", got)
+	}
+}
+
+func TestMaximumRedPhaseOverridesHigherPressure(t *testing.T) {
+	evaluations := []PhasePressure{{PhaseIndex: 0, Pressure: 100}, {PhaseIndex: 1, Pressure: 20}, {PhaseIndex: 2, Pressure: 2}}
+	redElapsed := []float64{0, 30, 121}
+	if got := selectNextPhase(evaluations, 0, redElapsed, 120); got != 2 {
+		t.Fatalf("maximum-red guard selected phase %d, want overdue phase 2", got)
+	}
+	redElapsed[2] = 119
+	if got := selectNextPhase(evaluations, 0, redElapsed, 120); got != 1 {
+		t.Fatalf("pressure selection chose phase %d before maximum red, want phase 1", got)
 	}
 }
 
