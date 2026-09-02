@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"traffic/internal/model"
@@ -46,6 +47,13 @@ func TestCityAndStaticEndpoints(t *testing.T) {
 	}
 	if city.DrivingSide != model.DrivingSideRight || city.MovementRules.ThroughToleranceDegrees != 40 {
 		t.Fatalf("city API omitted traffic conventions: side=%q rules=%+v", city.DrivingSide, city.MovementRules)
+	}
+	request = httptest.NewRequest(http.MethodGet, "/", nil)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	html := response.Body.String()
+	if !strings.Contains(html, `<option value="10">10×</option>`) || !strings.Contains(html, `id="safe-gap-control" type="range" min="4" max="80" step="2" value="4"`) {
+		t.Fatal("dashboard does not expose the 10x rate or 4m initial spacing")
 	}
 }
 
@@ -100,5 +108,31 @@ func TestControlVehicleSpacing(t *testing.T) {
 	}
 	if snapshot.Spacing.SafeGap != 42 {
 		t.Fatalf("safe gap = %v, want 42", snapshot.Spacing.SafeGap)
+	}
+}
+
+func TestControlSupportsTenTimesSpeed(t *testing.T) {
+	handler := testHandler(t)
+	body := bytes.NewBufferString(`{"action":"set_time_scale","time_scale":10}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/control", body)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("POST 10x time scale = %d: %s", response.Code, response.Body.String())
+	}
+	var snapshot sim.Snapshot
+	if err := json.Unmarshal(response.Body.Bytes(), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.TimeScale != 10 {
+		t.Fatalf("time scale = %v, want 10", snapshot.TimeScale)
+	}
+
+	body = bytes.NewBufferString(`{"action":"set_time_scale","time_scale":10.1}`)
+	request = httptest.NewRequest(http.MethodPost, "/api/control", body)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("POST time scale above 10x = %d, want %d", response.Code, http.StatusBadRequest)
 	}
 }

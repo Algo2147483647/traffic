@@ -115,6 +115,18 @@ func TestBuildGraphRejectsUnknownIntersection(t *testing.T) {
 	}
 }
 
+func TestDefaultVehicleSpacingIsFourMeters(t *testing.T) {
+	cfg := testConfig()
+	cfg.Simulation.SafeGap = 0
+	graph, err := BuildGraph(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if graph.Simulation.SafeGap != 4 {
+		t.Fatalf("default safe gap = %v, want 4", graph.Simulation.SafeGap)
+	}
+}
+
 func TestTrafficPlanSwitchesAndValidatesIncomingWays(t *testing.T) {
 	cfg := testConfig()
 	cfg.Intersections[1].Traffic = TrafficControlConfig{OffsetSeconds: 1, Phases: []TrafficPhaseConfig{

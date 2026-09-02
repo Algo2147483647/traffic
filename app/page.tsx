@@ -53,7 +53,7 @@ export default function Home() {
     }).then((data: City) => {
       if (cancelled) return;
       setCity(data); setMode("live");
-      setPopulation(data.simulation.people); setSpawnRate(data.simulation.spawn_rate_per_second || 0); setMaxPopulation(data.simulation.max_people || data.simulation.people); setSafeGap(data.simulation.safe_gap || 26);
+      setPopulation(data.simulation.people); setSpawnRate(data.simulation.spawn_rate_per_second || 0); setMaxPopulation(data.simulation.max_people || data.simulation.people); setSafeGap(data.simulation.safe_gap || 4);
       events = new EventSource(`${backend.current}/api/stream`);
       events.addEventListener("snapshot", (event) => setSnapshot(JSON.parse((event as MessageEvent).data)));
       events.addEventListener("error", () => setMode("connecting"));
@@ -107,7 +107,7 @@ export default function Home() {
         <button onClick={() => request(snapshot.paused ? "resume" : "pause")}>{snapshot.paused ? "Resume" : "Pause"}</button>
         <button className="quiet" onClick={() => request("step", { delta: .05 })}>Step</button>
         <button className="quiet" onClick={() => request("reset")}>Reset</button>
-        <label className="select-control">RATE<select value={snapshot.time_scale} onChange={(event) => request("set_time_scale", { time_scale: Number(event.target.value) })}><option value="0.5">0.5×</option><option value="1">1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+        <label className="select-control">RATE<select value={snapshot.time_scale} onChange={(event) => request("set_time_scale", { time_scale: Number(event.target.value) })}><option value="0.5">0.5×</option><option value="1">1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option><option value="10">10×</option></select></label>
         <span className="divider" aria-hidden="true"/>
         <button className="quiet icon-button" aria-label="Zoom out" onClick={() => view("out")}>−</button>
         <button className="quiet icon-button" aria-label="Zoom in" onClick={() => view("in")}>+</button>

@@ -231,7 +231,7 @@ Minimal shape:
     "tick_ms": 50,
     "walk_speed": 24,
     "drive_speed": 90,
-    "safe_gap": 16
+    "safe_gap": 4
   },
   "intersections": [
     { "id": "A", "name": "Alpha", "position": { "x": 100, "y": 300 } },
@@ -288,9 +288,9 @@ Control examples:
 { "action": "pause" }
 { "action": "step", "delta": 0.05 }
 { "action": "reset", "population": 120 }
-{ "action": "set_time_scale", "time_scale": 2 }
+{ "action": "set_time_scale", "time_scale": 10 }
 { "action": "set_load", "population": 500, "spawn_rate_per_second": 4, "max_population": 1200 }
-{ "action": "set_spacing", "safe_gap": 34 }
+{ "action": "set_spacing", "safe_gap": 4 }
 ```
 
 ## Project layout

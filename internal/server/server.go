@@ -156,8 +156,8 @@ func (s *Server) control(w http.ResponseWriter, r *http.Request) {
 	case "reset":
 		s.simulation.Reset(request.Population)
 	case "set_time_scale":
-		if request.TimeScale <= 0 || request.TimeScale > 8 {
-			s.writeError(w, http.StatusBadRequest, "time_scale must be in (0, 8]")
+		if request.TimeScale <= 0 || request.TimeScale > 10 {
+			s.writeError(w, http.StatusBadRequest, "time_scale must be in (0, 10]")
 			return
 		}
 		s.simulation.SetTimeScale(request.TimeScale)

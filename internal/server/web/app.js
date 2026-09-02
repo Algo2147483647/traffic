@@ -7,7 +7,7 @@
   const $ = (id) => document.getElementById(id);
   const state = {
     city: null, snapshot: null, selected: null, showTransforms: false, transform: null,
-    camera: { zoom: 1, panX: 0, panY: 0 }, pointers: new Map(),
+    camera: { zoom: 1, panX: 0, panY: 0 }, pointers: new Map(), laneDirections: new Map(),
   };
 
   function setConnection(status, label) {
@@ -101,6 +101,7 @@
     drawIntersectionPads();
     drawSelectedTrip();
     drawSignals();
+    drawLaneDirectionMarkings();
     drawIntersections();
     if (state.showTransforms) drawTransforms();
     drawPeople();
@@ -143,6 +144,153 @@
       corners.sort((a,b)=>Math.atan2(a.y-intersection.position.y,a.x-intersection.position.x)-Math.atan2(b.y-intersection.position.y,b.x-intersection.position.x));
       ctx.fillStyle="#111c19";ctx.strokeStyle="rgba(220,233,225,.3)";ctx.lineWidth=.8*scale;ctx.beginPath();corners.forEach((corner,index)=>{const p=screen(corner);if(!index)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);});ctx.closePath();ctx.fill();ctx.stroke();
     });
+  }
+
+  function buildLaneDirections(city) {
+    const ways = Object.fromEntries(city.ways.map((way) => [way.id, way]));
+    const assignments = new Map();
+    city.intersections.forEach((intersection) => {
+      (intersection.traffic_control?.phases || []).forEach((phase) => {
+        (phase.allowed_movements || []).forEach((movement) => {
+          const incoming = ways[movement.from_way_id], outgoing = ways[movement.to_way_id];
+          if (!incoming || !outgoing) return;
+          const fromLanes = movement.from_lanes?.length
+            ? movement.from_lanes
+            : [...new Set((movement.lane_connections || []).map((connection) => connection.from_lane))];
+          const incomingTangent = sampleWay(incoming, wayLength(incoming), 0);
+          const outgoingTangent = sampleWay(outgoing, 0, 0);
+          const dot = incomingTangent.tx * outgoingTangent.tx + incomingTangent.ty * outgoingTangent.ty;
+          const cross = incomingTangent.tx * outgoingTangent.ty - incomingTangent.ty * outgoingTangent.tx;
+          const direction = { toWayID: outgoing.id, turn: movement.turn, angle: Math.atan2(cross, dot) };
+          if (!assignments.has(incoming.id)) assignments.set(incoming.id, new Map());
+          const byLane = assignments.get(incoming.id);
+          fromLanes.forEach((lane) => {
+            if (!byLane.has(lane)) byLane.set(lane, new Map());
+            byLane.get(lane).set(outgoing.id, direction);
+          });
+        });
+      });
+    });
+    assignments.forEach((byLane) => byLane.forEach((targets, lane) => {
+      byLane.set(lane, [...targets.values()].sort((a, b) => a.angle - b.angle || a.toWayID.localeCompare(b.toWayID)));
+    }));
+    return assignments;
+  }
+
+  function drawLaneDirectionMarkings() {
+    if (!state.laneDirections.size) return;
+    const radius = state.city.simulation.intersection_radius || 22;
+    state.city.ways.forEach((way) => {
+      const byLane = state.laneDirections.get(way.id);
+      if (!byLane) return;
+      const stop = Math.max(0, wayLength(way) - radius);
+      for (let lane = 0; lane < way.lanes; lane++) {
+        const directions = byLane.get(lane);
+        if (!directions?.length) continue;
+        const order = { left: 0, through: 1, right: 2, u_turn: 3 };
+        const turns = [...new Set(directions.map((direction) => direction.turn || "through"))]
+          .sort((a, b) => (order[a] ?? 4) - (order[b] ?? 4));
+        // GB 5768.3 limits a combined arrow to two directions. Extremely
+        // direction-scarce simulated lanes therefore use adjacent standard
+        // groups rather than an invented many-branched symbol.
+        const groups = [];
+        for (let index = 0; index < turns.length; index += 2) groups.push(turns.slice(index, index + 2));
+        const metreScale = way.lane_width / 3.5;
+        const nominalMetres = way.speed_limit >= 100 ? 9 : way.speed_limit > 60 ? 6 : way.speed_limit > 40 ? 4.5 : 3;
+        const arrowLength = Math.max(6, nominalMetres * metreScale);
+        const stopGap = 3 * metreScale;
+        const groupSpan = groups.length * arrowLength + Math.max(0, groups.length - 1) * stopGap;
+        const repeatSpacing = Math.max(30 * metreScale, groupSpan + arrowLength);
+        for (let repetition = 0; repetition < 2; repetition++) {
+          for (let group = 0; group < groups.length; group++) {
+            const tipAlong = stop - stopGap - repetition * repeatSpacing - group * (arrowLength + stopGap);
+            const along = tipAlong - arrowLength / 2;
+            if (along - arrowLength / 2 < 0) continue;
+            drawLaneDirectionArrow(way, lane, along, groups[group], arrowLength);
+          }
+        }
+      }
+    });
+  }
+
+  function drawLaneDirectionArrow(way, lane, along, turns, arrowLength) {
+    const sample = sampleWay(way, along, lane), position = screen(sample), scale = currentTransform().scale;
+    const length = arrowLength * scale, laneWidth = way.lane_width * scale;
+    const tailX = -length / 2, branchX = -length * .06;
+    // GB 5768 arrow proportions: narrow 5%-of-length stems and 10%-of-length
+    // straight arrowheads. Lane-width caps keep high-speed markings contained.
+    const shaftWidth = Math.max(.65, Math.min(laneWidth * .13, length * .05));
+    const straightHeadHalf = Math.min(laneWidth * .14, length * .05);
+    const straightBaseX = length * .1;
+    ctx.save();
+    ctx.translate(position.x, position.y);
+    ctx.rotate(Math.atan2(sample.ty, sample.tx));
+    // Keep the complete marking inside the lane even at extreme zoom levels.
+    ctx.beginPath();
+    ctx.rect(-length * .58, -laneWidth * .46, length * 1.16, laneWidth * .92);
+    ctx.clip();
+    ctx.fillStyle = "rgba(244,247,245,.82)";
+    ctx.strokeStyle = "rgba(244,247,245,.82)";
+    ctx.lineWidth = shaftWidth;
+    ctx.lineCap = "butt";
+    ctx.lineJoin = "miter";
+
+    const through = turns.includes("through");
+    ctx.beginPath();
+    ctx.moveTo(tailX, 0);
+    ctx.lineTo(through ? straightBaseX : branchX, 0);
+    ctx.stroke();
+
+    if (through) {
+      ctx.beginPath();
+      ctx.moveTo(length / 2, 0);
+      ctx.lineTo(straightBaseX, -straightHeadHalf);
+      ctx.lineTo(straightBaseX, straightHeadHalf);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    const drawTurn = (sign) => {
+      const tip = { x: length * .42, y: sign * laneWidth * .34 };
+      const elbow = { x: length * .08, y: sign * laneWidth * .17 };
+      const directionX = tip.x - elbow.x, directionY = tip.y - elbow.y;
+      const directionLength = Math.hypot(directionX, directionY);
+      const unitX = directionX / directionLength, unitY = directionY / directionLength;
+      const headLength = Math.min(length * .19, laneWidth * .42);
+      const headHalf = Math.min(length * .055, laneWidth * .14);
+      const base = { x: tip.x - unitX * headLength, y: tip.y - unitY * headLength };
+      const normal = { x: -unitY * headHalf, y: unitX * headHalf };
+      ctx.beginPath();
+      ctx.moveTo(branchX, 0);
+      ctx.lineTo(elbow.x, elbow.y);
+      ctx.lineTo(base.x, base.y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(tip.x, tip.y);
+      ctx.lineTo(base.x + normal.x, base.y + normal.y);
+      ctx.lineTo(base.x - normal.x, base.y - normal.y);
+      ctx.closePath();
+      ctx.fill();
+    };
+    if (turns.includes("left")) drawTurn(-1);
+    if (turns.includes("right")) drawTurn(1);
+
+    if (turns.includes("u_turn")) {
+      const sign = state.city.driving_side === "left" ? 1 : -1;
+      const turnY = sign * laneWidth * .28, tipX = -length * .25, baseX = tipX + length * .16;
+      const uHeadHalf = Math.min(length * .055, laneWidth * .14);
+      ctx.beginPath();
+      ctx.moveTo(branchX, 0);
+      ctx.bezierCurveTo(length * .28, 0, length * .25, turnY, baseX, turnY);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(tipX, turnY);
+      ctx.lineTo(baseX, turnY - uHeadHalf);
+      ctx.lineTo(baseX, turnY + uHeadHalf);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   function drawSelectedTrip() {
@@ -234,12 +382,13 @@
     const performance = snapshot.control_performance;
     if (performance) { $("signal-queue").textContent = performance.current_signal_queue; $("throughput").textContent = performance.throughput_per_minute.toFixed(1); $("mean-delay").textContent = `${performance.mean_signal_delay_seconds.toFixed(1)}s`; }
     $("load-current").textContent = snapshot.load?.population ?? snapshot.people.length;
+    $("time-scale").value = String(snapshot.time_scale);
     $("pause-button").textContent = snapshot.paused ? "Resume" : "Pause";
     refreshInspector(); draw();
   }
 
   function updateCity(city) {
-    state.city = city; $("city-name").textContent = city.name; $("city-description").textContent = city.description;
+    state.city = city; state.laneDirections = buildLaneDirections(city); $("city-name").textContent = city.name; $("city-description").textContent = city.description;
     $("intersection-count").textContent = city.intersections.length; $("way-count").textContent = city.ways.length;
     $("lane-count").textContent = city.edges.reduce((sum, edge) => sum + edge.weight, 0);
     $("population-control").value = city.simulation.people; $("population-value").textContent = city.simulation.people;

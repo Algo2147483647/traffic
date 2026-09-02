@@ -188,7 +188,7 @@ func applySimulationDefaults(cfg *SimulationConfig) {
 		cfg.DriveSpeed = 90
 	}
 	if cfg.SafeGap <= 0 {
-		cfg.SafeGap = 18
+		cfg.SafeGap = 4
 	}
 	if cfg.SnapshotFPS <= 0 {
 		cfg.SnapshotFPS = 12

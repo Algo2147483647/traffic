@@ -705,7 +705,7 @@ func (s *Simulation) SetPaused(paused bool) {
 func (s *Simulation) SetTimeScale(scale float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if scale > 0 && scale <= 8 {
+	if scale > 0 && scale <= 10 {
 		s.timeScale = scale
 	}
 }

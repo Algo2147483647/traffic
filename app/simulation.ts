@@ -169,7 +169,7 @@ export const demoCity: City = {
   driving_side:"right",
   movement_rules:movementRules,
   bounds:{min_x:0,min_y:0,max_x:3600,max_y:2200},
-  simulation:{people:320,spawn_rate_per_second:2.5,max_people:1600,vehicle_size:18,intersection_radius:58,safe_gap:26},
+  simulation:{people:320,spawn_rate_per_second:2.5,max_people:1600,vehicle_size:18,intersection_radius:58,safe_gap:4},
   intersections,ways:allWays,edges:allWays.map((way)=>({weight:way.lanes})),
 };
 
