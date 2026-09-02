@@ -228,6 +228,12 @@ func newSimulation(graph *model.Graph, adaptive bool) *Simulation {
 }
 
 func (s *Simulation) City() CityView {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cityLocked()
+}
+
+func (s *Simulation) cityLocked() CityView {
 	return CityView{
 		Name: s.graph.Name, Description: s.graph.Description, DrivingSide: s.graph.DrivingSide, MovementRules: s.graph.MovementRules, Bounds: s.graph.Bounds,
 		Simulation: s.graph.Simulation, Intersections: s.graph.SortedIntersections(),
@@ -235,15 +241,35 @@ func (s *Simulation) City() CityView {
 	}
 }
 
+// ReplaceGraph atomically switches the running simulation to another validated
+// city graph and restores that preset's initial load and control settings.
+func (s *Simulation) ReplaceGraph(graph *model.Graph) {
+	if graph == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.graph = graph
+	s.paused = false
+	s.timeScale = 1
+	s.spawnRate = graph.Simulation.SpawnRate
+	s.maxPeople = graph.Simulation.MaxPeople
+	s.safeGap = graph.Simulation.SafeGap
+	s.resetLocked(graph.Simulation.People)
+}
+
 func (s *Simulation) Run(ctx context.Context) {
-	ticker := time.NewTicker(time.Duration(s.graph.Simulation.TickMS) * time.Millisecond)
+	s.mu.RLock()
+	tickMS := s.graph.Simulation.TickMS
+	s.mu.RUnlock()
+	ticker := time.NewTicker(time.Duration(tickMS) * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.Tick(float64(s.graph.Simulation.TickMS) / 1000)
+			s.Tick(float64(tickMS) / 1000)
 		}
 	}
 }

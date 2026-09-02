@@ -7,7 +7,7 @@
   const $ = (id) => document.getElementById(id);
   const state = {
     city: null, snapshot: null, selected: null, showTransforms: false, transform: null,
-    camera: { zoom: 1, panX: 0, panY: 0 }, pointers: new Map(), laneDirections: new Map(),
+    camera: { zoom: 1, panX: 0, panY: 0 }, pointers: new Map(), laneDirections: new Map(), presetID: null,
   };
 
   function setConnection(status, label) {
@@ -117,18 +117,25 @@
 
   function drawWays() {
     const scale = currentTransform().scale;
+    const minimumWidths = { arterial: 4.8, ramp: 3.2, collector: 2.6, local: 1.35 };
     state.city.ways.forEach((way) => {
-      const length = wayLength(way), centre = (way.lanes - 1) / 2, width = way.lanes * way.lane_width * scale;
-      drawWayRange(way, 0, length, centre, "rgba(218,229,222,.28)", width + 1.8 * scale);
-      drawWayRange(way, 0, length, centre, "#17231f", width);
-      for (let boundary = 1; boundary < way.lanes; boundary++) {
-        ctx.setLineDash([5 * scale, 5 * scale]);
-        drawWayRange(way, 0, length, centre, "rgba(218,229,222,.35)", .65 * scale, (boundary - way.lanes / 2) * way.lane_width);
-        ctx.setLineDash([]);
+      const length = wayLength(way), centre = (way.lanes - 1) / 2;
+      const physicalWidth = way.lanes * way.lane_width * scale;
+      const width = Math.max(physicalWidth, minimumWidths[way.road_class] || 1.35);
+      drawWayRange(way, 0, length, centre, "rgba(218,229,222,.28)", width + Math.max(.8, 1.8 * scale));
+      drawWayRange(way, 0, length, centre, way.road_class === "arterial" ? "#17231f" : "#15211e", width);
+      if (way.lane_width * scale >= 1.2) {
+        for (let boundary = 1; boundary < way.lanes; boundary++) {
+          ctx.setLineDash([Math.max(2, 5 * scale), Math.max(2, 5 * scale)]);
+          drawWayRange(way, 0, length, centre, "rgba(218,229,222,.35)", Math.max(.45, .65 * scale), (boundary - way.lanes / 2) * way.lane_width);
+          ctx.setLineDash([]);
+        }
       }
-      for (let along = 55; along < length - 38; along += 86) {
+      const directionSpacing = Math.max(86, 55 / scale);
+      for (let along = directionSpacing * .65; along < length - directionSpacing * .45; along += directionSpacing) {
         for (let lane = 0; lane < way.lanes; lane++) {
           const sample = sampleWay(way, along, lane), p = screen(sample), size = Math.min(4.2, way.lane_width * .58) * scale;
+          if (size < .65) continue;
           ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.atan2(sample.ty, sample.tx)); ctx.strokeStyle = "rgba(224,235,229,.46)"; ctx.lineWidth = .8 * scale;
           ctx.beginPath(); ctx.moveTo(-size, -size * .55); ctx.lineTo(0, 0); ctx.lineTo(-size, size * .55); ctx.stroke(); ctx.restore();
         }
@@ -342,10 +349,11 @@
 
   function drawIntersections() {
     const selectedID = state.selected?.type === "intersection" ? state.selected.id : null;
+    const denseOverview = state.city.intersections.length > 40 && state.camera.zoom < 4.5;
     state.city.intersections.forEach((intersection) => {
       const p = screen(intersection.position), signal = state.snapshot?.signals?.find((item) => item.intersection_id === intersection.id);
-      const marker=selectedID===intersection.id?7:5;ctx.fillStyle=selectedID===intersection.id?"#fff":"#dfe4d8";ctx.fillRect(p.x-marker,p.y-marker,marker*2,marker*2);ctx.strokeStyle=signal?.stage==="green"?"rgba(200,242,107,.9)":signal?.stage==="amber"?"rgba(239,200,91,.9)":"rgba(255,120,95,.65)";ctx.lineWidth=selectedID===intersection.id?2:1;ctx.strokeRect(p.x-marker*2,p.y-marker*2,marker*4,marker*4);
-      if (state.camera.zoom > .36) { ctx.fillStyle = "rgba(235,238,228,.66)"; ctx.font = "9px ui-monospace,monospace"; ctx.fillText(`${intersection.id}  ${intersection.name.toUpperCase()}`, p.x + 13, p.y - 8); }
+      const marker=selectedID===intersection.id?7:denseOverview?2.2:5,halo=denseOverview?1.6:2;ctx.fillStyle=selectedID===intersection.id?"#fff":"#dfe4d8";ctx.fillRect(p.x-marker,p.y-marker,marker*2,marker*2);ctx.strokeStyle=signal?.stage==="green"?"rgba(200,242,107,.9)":signal?.stage==="amber"?"rgba(239,200,91,.9)":"rgba(255,120,95,.65)";ctx.lineWidth=selectedID===intersection.id?2:1;ctx.strokeRect(p.x-marker*halo,p.y-marker*halo,marker*halo*2,marker*halo*2);
+      if (selectedID === intersection.id || (!denseOverview && state.camera.zoom > .36)) { ctx.fillStyle = "rgba(235,238,228,.66)"; ctx.font = "9px ui-monospace,monospace"; ctx.fillText(`${intersection.id}  ${intersection.name.toUpperCase()}`, p.x + 13, p.y - 8); }
     });
   }
 
@@ -393,6 +401,7 @@
     $("lane-count").textContent = city.edges.reduce((sum, edge) => sum + edge.weight, 0);
     $("population-control").value = city.simulation.people; $("population-value").textContent = city.simulation.people;
     $("spawn-rate-control").value = city.simulation.spawn_rate_per_second || 0; $("spawn-rate-value").textContent = `${Number(city.simulation.spawn_rate_per_second || 0).toFixed(1)}/s`;
+    $("max-population-control").max = Math.max(2000, city.simulation.max_people);
     $("max-population-control").value = city.simulation.max_people; $("max-population-value").textContent = city.simulation.max_people;
     $("safe-gap-control").value = city.simulation.safe_gap; $("safe-gap-value").textContent = `${city.simulation.safe_gap} m`;
     fitCanvas();
@@ -432,8 +441,42 @@
   }
 
   async function control(action, extras = {}) {
-    try { const response = await fetch("/api/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...extras }) }); if (!response.ok) throw new Error(await response.text()); updateSnapshot(await response.json()); }
-    catch (error) { setConnection("error", "Control request failed"); console.error(error); }
+    try { const response = await fetch("/api/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...extras }) }); if (!response.ok) throw new Error(await response.text()); const snapshot = await response.json(); updateSnapshot(snapshot); return snapshot; }
+    catch (error) { setConnection("error", "Control request failed"); console.error(error); return null; }
+  }
+
+  async function loadPresets() {
+    try {
+      const response = await fetch("/api/presets");
+      if (!response.ok) throw new Error(await response.text());
+      const payload = await response.json(), select = $("map-preset");
+      select.replaceChildren(...payload.presets.map((preset, index) => {
+        const option = document.createElement("option");
+        option.value = preset.id; option.textContent = `Preset ${index + 1} · ${preset.name}`; option.title = preset.description;
+        return option;
+      }));
+      state.presetID = payload.current_preset_id; select.value = state.presetID; select.disabled = payload.presets.length < 2;
+    } catch (error) {
+      setConnection("error", "Map presets unavailable"); console.error(error);
+    }
+  }
+
+  async function switchPreset(presetID) {
+    const select = $("map-preset"), previous = state.presetID;
+    select.disabled = true; state.selected = null; state.snapshot = null; setConnection("", "Switching map…");
+    const snapshot = await control("set_preset", { preset_id: presetID });
+    if (!snapshot) { select.value = previous; select.disabled = false; return; }
+    try {
+      const response = await fetch("/api/city");
+      if (!response.ok) throw new Error(await response.text());
+      state.camera = { zoom: 1, panX: 0, panY: 0 }; $("view-scale").textContent = "100%";
+      updateCity(await response.json()); state.presetID = presetID; select.value = presetID;
+      setConnection("live", "Live model connected");
+    } catch (error) {
+      setConnection("error", "Map switch incomplete"); console.error(error);
+    } finally {
+      select.disabled = false;
+    }
   }
 
   function canvasPoint(event) { const rect = canvas.getBoundingClientRect(); return { x: event.clientX - rect.left, y: event.clientY - rect.top }; }
@@ -463,6 +506,7 @@
 
   $("pause-button").addEventListener("click", () => control(state.snapshot?.paused ? "resume" : "pause")); $("step-button").addEventListener("click", () => control("step", { delta: .05 }));
   $("reset-button").addEventListener("click", () => { state.selected = null; control("reset"); }); $("time-scale").addEventListener("change", (event) => control("set_time_scale", { time_scale: Number(event.target.value) }));
+  $("map-preset").addEventListener("change", (event) => switchPreset(event.target.value));
   $("show-transforms").addEventListener("change", (event) => { state.showTransforms = event.target.checked; draw(); });
   $("zoom-in-button").addEventListener("click", () => zoomAt(1.5, state.transform.width / 2, state.transform.height / 2)); $("zoom-out-button").addEventListener("click", () => zoomAt(1 / 1.5, state.transform.width / 2, state.transform.height / 2)); $("fit-button").addEventListener("click", resetView);
   $("fullscreen-button").addEventListener("click", async () => { if (document.fullscreenElement) await document.exitFullscreen(); else await dashboard.requestFullscreen(); });
@@ -476,5 +520,6 @@
   });
   document.addEventListener("fullscreenchange", () => { $("fullscreen-button").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen"; setTimeout(fitCanvas, 0); }); window.addEventListener("resize", fitCanvas);
 
+  loadPresets();
   const events = new EventSource("/api/stream"); events.addEventListener("open", () => setConnection("live", "Live model connected")); events.addEventListener("city", (event) => updateCity(JSON.parse(event.data))); events.addEventListener("snapshot", (event) => updateSnapshot(JSON.parse(event.data))); events.addEventListener("error", () => setConnection("error", "Reconnecting to model"));
 })();

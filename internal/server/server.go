@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"traffic/internal/model"
 	"traffic/internal/sim"
 )
 
@@ -23,16 +24,70 @@ type Server struct {
 	handler    http.Handler
 	shutdown   chan struct{}
 	closeOnce  sync.Once
+	presetMu   sync.RWMutex
+	presets    map[string]*model.Graph
+	presetList []presetInfo
+	current    string
+	revision   uint64
+}
+
+type Preset struct {
+	ID    string
+	Graph *model.Graph
+}
+
+type presetInfo struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	Intersections int    `json:"intersections"`
+	DirectedWays  int    `json:"directed_ways"`
 }
 
 func New(simulation *sim.Simulation, logger *slog.Logger) *Server {
+	city := simulation.City()
+	return newServer(simulation, logger, "current", nil, []presetInfo{{
+		ID: "current", Name: city.Name, Description: city.Description,
+		Intersections: len(city.Intersections), DirectedWays: len(city.Ways),
+	}})
+}
+
+// NewWithPresets exposes validated graphs as switchable map presets while one
+// Simulation instance continues to serve the existing stream connections.
+func NewWithPresets(simulation *sim.Simulation, logger *slog.Logger, current string, presets []Preset) *Server {
+	graphs := make(map[string]*model.Graph, len(presets))
+	infos := make([]presetInfo, 0, len(presets))
+	for _, preset := range presets {
+		if preset.ID == "" || preset.Graph == nil {
+			continue
+		}
+		if _, duplicate := graphs[preset.ID]; duplicate {
+			panic("duplicate map preset: " + preset.ID)
+		}
+		graphs[preset.ID] = preset.Graph
+		infos = append(infos, presetInfo{
+			ID: preset.ID, Name: preset.Graph.Name, Description: preset.Graph.Description,
+			Intersections: len(preset.Graph.Intersections), DirectedWays: len(preset.Graph.Ways),
+		})
+	}
+	if len(infos) == 0 {
+		return New(simulation, logger)
+	}
+	if _, ok := graphs[current]; !ok {
+		current = infos[0].ID
+	}
+	return newServer(simulation, logger, current, graphs, infos)
+}
+
+func newServer(simulation *sim.Simulation, logger *slog.Logger, current string, presets map[string]*model.Graph, presetList []presetInfo) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	server := &Server{simulation: simulation, logger: logger, shutdown: make(chan struct{})}
+	server := &Server{simulation: simulation, logger: logger, shutdown: make(chan struct{}), presets: presets, presetList: presetList, current: current}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", server.health)
 	mux.HandleFunc("GET /api/city", server.city)
+	mux.HandleFunc("GET /api/presets", server.presetOptions)
 	mux.HandleFunc("GET /api/snapshot", server.snapshot)
 	mux.HandleFunc("GET /api/stream", server.stream)
 	mux.HandleFunc("POST /api/control", server.control)
@@ -77,6 +132,15 @@ func (s *Server) city(w http.ResponseWriter, _ *http.Request) {
 	s.writeJSON(w, http.StatusOK, s.simulation.City())
 }
 
+func (s *Server) presetOptions(w http.ResponseWriter, _ *http.Request) {
+	s.presetMu.RLock()
+	defer s.presetMu.RUnlock()
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"current_preset_id": s.current,
+		"presets":           append([]presetInfo(nil), s.presetList...),
+	})
+}
+
 func (s *Server) snapshot(w http.ResponseWriter, _ *http.Request) {
 	s.writeJSON(w, http.StatusOK, s.simulation.Snapshot())
 }
@@ -108,6 +172,9 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 		}
 		return err
 	}
+	s.presetMu.RLock()
+	revision := s.revision
+	s.presetMu.RUnlock()
 	if err := writeEvent("city", s.simulation.City()); err != nil {
 		return
 	}
@@ -121,6 +188,15 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 		case <-s.shutdown:
 			return
 		case <-ticker.C:
+			s.presetMu.RLock()
+			currentRevision := s.revision
+			s.presetMu.RUnlock()
+			if currentRevision != revision {
+				if err := writeEvent("city", s.simulation.City()); err != nil {
+					return
+				}
+				revision = currentRevision
+			}
 			if err := writeEvent("snapshot", s.simulation.Snapshot()); err != nil {
 				return
 			}
@@ -136,6 +212,7 @@ type controlRequest struct {
 	MaxPeople  int     `json:"max_population,omitempty"`
 	Delta      float64 `json:"delta,omitempty"`
 	SafeGap    float64 `json:"safe_gap,omitempty"`
+	PresetID   string  `json:"preset_id,omitempty"`
 }
 
 func (s *Server) control(w http.ResponseWriter, r *http.Request) {
@@ -181,8 +258,21 @@ func (s *Server) control(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.simulation.SetSpacing(request.SafeGap)
+	case "set_preset":
+		s.presetMu.RLock()
+		graph, ok := s.presets[request.PresetID]
+		s.presetMu.RUnlock()
+		if !ok {
+			s.writeError(w, http.StatusBadRequest, "unknown preset_id")
+			return
+		}
+		s.simulation.ReplaceGraph(graph)
+		s.presetMu.Lock()
+		s.current = request.PresetID
+		s.revision++
+		s.presetMu.Unlock()
 	default:
-		s.writeError(w, http.StatusBadRequest, "unknown action; use pause, resume, step, reset, set_time_scale, set_load, or set_spacing")
+		s.writeError(w, http.StatusBadRequest, "unknown action; use pause, resume, step, reset, set_time_scale, set_load, set_spacing, or set_preset")
 		return
 	}
 	s.writeJSON(w, http.StatusOK, s.simulation.Snapshot())

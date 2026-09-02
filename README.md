@@ -16,6 +16,18 @@ Open [http://localhost:8080](http://localhost:8080). The HTML, CSS, and
 JavaScript are embedded in the Go binary, so the application does not need a
 separate frontend process.
 
+The top-bar map selector exposes two live presets:
+
+- **Preset 1 — Meridian Hierarchy** keeps the JSON map supplied through
+  `-config` (the existing `configs/meridian-city.json` by default).
+- **Preset 2 — Atlas Metropolitan Grid** provides a 16 km, four-by-four core
+  expressway grid with four lanes per direction. Each of its 16 grid cells
+  contains an internal district network connected through independent
+  mid-block ramps, collectors, and local branches; supporting roads never
+  terminate at a core intersection or expand the city footprint. Switching
+  presets resets vehicles and signal controllers to that map's initial state
+  without restarting the server.
+
 ```bash
 go test ./cmd/... ./internal/...
 go build -o traffic ./cmd/traffic

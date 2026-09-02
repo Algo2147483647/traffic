@@ -30,7 +30,7 @@ func testHandler(t *testing.T) http.Handler {
 
 func TestCityAndStaticEndpoints(t *testing.T) {
 	handler := testHandler(t)
-	for _, path := range []string{"/", "/styles.css", "/api/city", "/api/snapshot", "/api/health"} {
+	for _, path := range []string{"/", "/styles.css", "/api/city", "/api/presets", "/api/snapshot", "/api/health"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
@@ -52,8 +52,55 @@ func TestCityAndStaticEndpoints(t *testing.T) {
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	html := response.Body.String()
-	if !strings.Contains(html, `<option value="10">10×</option>`) || !strings.Contains(html, `id="safe-gap-control" type="range" min="4" max="80" step="2" value="4"`) {
-		t.Fatal("dashboard does not expose the 10x rate or 4m initial spacing")
+	if !strings.Contains(html, `<option value="10">10×</option>`) || !strings.Contains(html, `id="safe-gap-control" type="range" min="4" max="80" step="2" value="4"`) || !strings.Contains(html, `id="map-preset"`) {
+		t.Fatal("dashboard does not expose map presets, the 10x rate, or 4m initial spacing")
+	}
+}
+
+func TestMapPresetSwitch(t *testing.T) {
+	build := func(name string, people int) *model.Graph {
+		t.Helper()
+		graph, err := model.BuildGraph(model.CityConfig{
+			Name: name, Bounds: model.Bounds{MaxX: 100, MaxY: 100}, Simulation: model.SimulationConfig{People: people},
+			Intersections: []model.IntersectionConfig{{ID: "A", Position: model.Vec2{X: 10, Y: 50}}, {ID: "B", Position: model.Vec2{X: 90, Y: 50}}},
+			Ways:          []model.WayConfig{{ID: "AB", From: "A", To: "B", Lanes: 2}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return graph
+	}
+	first, second := build("Preset One", 2), build("Preset Two", 5)
+	simulation := sim.New(first)
+	handler := NewWithPresets(simulation, slog.New(slog.NewTextHandler(io.Discard, nil)), "preset-1", []Preset{
+		{ID: "preset-1", Graph: first}, {ID: "preset-2", Graph: second},
+	}).Handler()
+
+	request := httptest.NewRequest(http.MethodGet, "/api/presets", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	var options struct {
+		Current string       `json:"current_preset_id"`
+		Presets []presetInfo `json:"presets"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &options); err != nil {
+		t.Fatal(err)
+	}
+	if options.Current != "preset-1" || len(options.Presets) != 2 {
+		t.Fatalf("unexpected preset options: %+v", options)
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/api/control", bytes.NewBufferString(`{"action":"set_preset","preset_id":"preset-2"}`))
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("POST preset switch = %d: %s", response.Code, response.Body.String())
+	}
+	if city := simulation.City(); city.Name != "Preset Two" {
+		t.Fatalf("city after preset switch = %q", city.Name)
+	}
+	if snapshot := simulation.Snapshot(); snapshot.City != "Preset Two" || len(snapshot.People) != 5 {
+		t.Fatalf("snapshot was not reset for preset two: city=%q people=%d", snapshot.City, len(snapshot.People))
 	}
 }
 
