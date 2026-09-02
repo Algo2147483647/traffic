@@ -7,14 +7,26 @@ type ViewCommand = { id: number; type: "in" | "out" | "fit" } | null;
 type Props = { city: City; snapshot: Snapshot; selected: Selection; onSelect: (selection: Selection) => void; transforms: boolean; viewCommand: ViewCommand; onZoom: (zoom: number) => void };
 type ScreenTransform = { scale: number; ox: number; oy: number; width: number; height: number; baseScale: number; baseOx: number; baseOy: number };
 
+function traceBezier(context: CanvasRenderingContext2D, points: Point[], tension = .55) {
+  if (!points.length) return;
+  context.moveTo(points[0].x, points[0].y);
+  for (let index = 0; index < points.length - 1; index++) {
+    const before=points[Math.max(0,index-1)],start=points[index],end=points[index+1],after=points[Math.min(points.length-1,index+2)];
+    context.bezierCurveTo(
+      start.x+(end.x-before.x)*tension/6,start.y+(end.y-before.y)*tension/6,
+      end.x-(after.x-start.x)*tension/6,end.y-(after.y-start.y)*tension/6,end.x,end.y,
+    );
+  }
+}
+
 function traceWay(context: CanvasRenderingContext2D, way: Way, t: ScreenTransform, from = 0, to = wayLength(way), lane = (way.lanes - 1) / 2, extraOffset = 0) {
-  const distance = Math.max(0, to - from), steps = Math.max(2, Math.ceil(distance / 24));
+  const distance = Math.max(0, to - from), steps = Math.max(4, Math.min(36, Math.ceil(distance / 160))), points: Point[] = [];
   context.beginPath();
   for (let index = 0; index <= steps; index++) {
     const world = sampleWay(way, from + distance * index / steps, lane, extraOffset).position;
-    const x = world.x * t.scale + t.ox, y = world.y * t.scale + t.oy;
-    if (!index) context.moveTo(x, y); else context.lineTo(x, y);
+    points.push({x:world.x*t.scale+t.ox,y:world.y*t.scale+t.oy});
   }
+  traceBezier(context,points);
 }
 
 function screenPoint(point: Point, t: ScreenTransform) { return { x: point.x * t.scale + t.ox, y: point.y * t.scale + t.oy }; }

@@ -126,6 +126,22 @@ func TestRuntimeVehicleSpacingIsApplied(t *testing.T) {
 	}
 }
 
+func TestRuntimeLoadSupportsTenThousandPeople(t *testing.T) {
+	simulation := New(simulationGraph(t))
+	simulation.SetLoad(10000, 0, 10000)
+	if got := len(simulation.people); got != 10000 {
+		t.Fatalf("population after SetLoad = %d, want 10000", got)
+	}
+	if simulation.maxPeople != 10000 {
+		t.Fatalf("population cap = %d, want 10000", simulation.maxPeople)
+	}
+	for index, person := range simulation.people {
+		if person.id != index+1 || len(person.route) == 0 {
+			t.Fatalf("parallel route initialization produced invalid person %d: %+v", index, person)
+		}
+	}
+}
+
 func TestClearanceSignalSerializesEmptyMovementArrays(t *testing.T) {
 	simulation := NewFixedTime(simulationGraph(t))
 	control := simulation.graph.Intersections["A"].TrafficControl

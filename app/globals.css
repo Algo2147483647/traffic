@@ -25,6 +25,8 @@ button.quiet:hover, button.quiet:focus-visible { background:rgba(255,255,255,.13
 .clock-block { min-width:78px; display:grid; gap:1px; }
 .clock-block span { color:var(--muted); font:8px var(--mono); letter-spacing:.1em; }
 .clock-block strong { font:500 18px var(--mono); letter-spacing:-.06em; }
+.frequency-block { min-width:58px; }
+.frequency-block strong { font-size:13px; letter-spacing:-.03em; }
 .select-control { display:flex; align-items:center; gap:6px; color:var(--muted); font:8px var(--mono); }
 .select-control select { height:34px; padding:0 7px; border:1px solid var(--line); color:var(--ink); background:rgba(255,255,255,.055); }
 .select-control option { color:#102019; }
@@ -90,7 +92,7 @@ button.quiet:hover, button.quiet:focus-visible { background:rgba(255,255,255,.13
 
 @media (max-width:1050px) {
   .top-overlay { align-items:flex-start; }
-  .brand-lockup { min-width:150px; }.simulation-controls { justify-content:flex-end; flex-wrap:wrap; }.clock-block { display:none; }.connection { display:none; }
+  .brand-lockup { min-width:150px; }.simulation-controls { justify-content:flex-end; flex-wrap:wrap; }.clock-block:not(.frequency-block) { display:none; }.connection { display:none; }
   .right-stack { top:105px; }
 }
 @media (max-width:760px) {

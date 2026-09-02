@@ -2,7 +2,7 @@ export type Point = { x: number; y: number };
 export type Matrix = number[][];
 export type SimulationSettings = {
   people: number; spawn_rate_per_second: number; max_people: number;
-  vehicle_size: number; intersection_radius: number; safe_gap: number;
+  vehicle_size: number; intersection_radius: number; safe_gap: number; tick_ms: number;
 };
 export type Movement = {
   from_way_id: string; to_way_id: string; from_lanes: number[]; to_lanes: number[];
@@ -169,7 +169,7 @@ export const demoCity: City = {
   driving_side:"right",
   movement_rules:movementRules,
   bounds:{min_x:0,min_y:0,max_x:3600,max_y:2200},
-  simulation:{people:320,spawn_rate_per_second:2.5,max_people:1600,vehicle_size:18,intersection_radius:58,safe_gap:4},
+  simulation:{people:320,spawn_rate_per_second:2.5,max_people:1600,vehicle_size:18,intersection_radius:58,safe_gap:4,tick_ms:50},
   intersections,ways:allWays,edges:allWays.map((way)=>({weight:way.lanes})),
 };
 

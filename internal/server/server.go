@@ -18,6 +18,8 @@ import (
 //go:embed web/*
 var webFiles embed.FS
 
+const maximumPopulation = 10000
+
 type Server struct {
 	simulation *sim.Simulation
 	logger     *slog.Logger
@@ -231,6 +233,10 @@ func (s *Server) control(w http.ResponseWriter, r *http.Request) {
 	case "step":
 		s.simulation.Step(request.Delta)
 	case "reset":
+		if request.Population < 0 || request.Population > maximumPopulation {
+			s.writeError(w, http.StatusBadRequest, "population must be 0 or in [1, 10000]")
+			return
+		}
 		s.simulation.Reset(request.Population)
 	case "set_time_scale":
 		if request.TimeScale <= 0 || request.TimeScale > 10 {
@@ -239,12 +245,12 @@ func (s *Server) control(w http.ResponseWriter, r *http.Request) {
 		}
 		s.simulation.SetTimeScale(request.TimeScale)
 	case "set_load":
-		if request.Population < 1 || request.Population > 5000 {
-			s.writeError(w, http.StatusBadRequest, "population must be in [1, 5000]")
+		if request.Population < 1 || request.Population > maximumPopulation {
+			s.writeError(w, http.StatusBadRequest, "population must be in [1, 10000]")
 			return
 		}
-		if request.MaxPeople < request.Population || request.MaxPeople > 5000 {
-			s.writeError(w, http.StatusBadRequest, "max_population must be between population and 5000")
+		if request.MaxPeople < request.Population || request.MaxPeople > maximumPopulation {
+			s.writeError(w, http.StatusBadRequest, "max_population must be between population and 10000")
 			return
 		}
 		if request.SpawnRate < 0 || request.SpawnRate > 100 {

@@ -30,7 +30,7 @@ func testHandler(t *testing.T) http.Handler {
 
 func TestCityAndStaticEndpoints(t *testing.T) {
 	handler := testHandler(t)
-	for _, path := range []string{"/", "/styles.css", "/api/city", "/api/presets", "/api/snapshot", "/api/health"} {
+	for _, path := range []string{"/", "/styles.css", "/app.js", "/api/city", "/api/presets", "/api/snapshot", "/api/health"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
@@ -52,8 +52,17 @@ func TestCityAndStaticEndpoints(t *testing.T) {
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	html := response.Body.String()
-	if !strings.Contains(html, `<option value="10">10×</option>`) || !strings.Contains(html, `id="safe-gap-control" type="range" min="4" max="80" step="2" value="4"`) || !strings.Contains(html, `id="map-preset"`) {
-		t.Fatal("dashboard does not expose map presets, the 10x rate, or 4m initial spacing")
+	if !strings.Contains(html, `<option value="10">10×</option>`) || !strings.Contains(html, `id="safe-gap-control" type="range" min="4" max="80" step="2" value="4"`) ||
+		!strings.Contains(html, `id="map-preset"`) || !strings.Contains(html, `id="compute-rate"`) ||
+		!strings.Contains(html, `id="population-control" type="range" min="20" max="10000"`) ||
+		!strings.Contains(html, `id="max-population-control" type="range" min="100" max="10000"`) {
+		t.Fatal("dashboard does not expose map presets, 10x rate, 4m spacing, 10,000 people, and compute frequency")
+	}
+	request = httptest.NewRequest(http.MethodGet, "/app.js", nil)
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if script := response.Body.String(); !strings.Contains(script, "bezierCurveTo") || !strings.Contains(script, "updateComputeRate") {
+		t.Fatal("dashboard script does not draw Bezier roads or measure compute frequency")
 	}
 }
 
@@ -137,6 +146,23 @@ func TestControlTrafficLoad(t *testing.T) {
 	}
 	if snapshot.Load.Population != 80 || snapshot.Load.SpawnRate != 3.5 || snapshot.Load.MaxPopulation != 200 {
 		t.Fatalf("unexpected load: %+v", snapshot.Load)
+	}
+}
+
+func TestControlTrafficLoadAllowsTenThousand(t *testing.T) {
+	handler := testHandler(t)
+	request := httptest.NewRequest(http.MethodPost, "/api/control", bytes.NewBufferString(`{"action":"set_load","population":2,"spawn_rate_per_second":0,"max_population":10000}`))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("POST 10,000 population cap = %d: %s", response.Code, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/api/control", bytes.NewBufferString(`{"action":"set_load","population":10001,"spawn_rate_per_second":0,"max_population":10001}`))
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("POST population above 10,000 = %d, want %d", response.Code, http.StatusBadRequest)
 	}
 }
 

@@ -104,6 +104,7 @@ export default function Home() {
       <div className="brand-lockup"><span className="mark">M</span><div><p className="eyebrow">Traffic field / live city</p><h1>{city.name}</h1></div></div>
       <div className="simulation-controls" aria-label="Simulation controls">
         <div className="clock-block"><span>SIM TIME</span><strong>{clock}</strong></div>
+        <div className="clock-block frequency-block" title="Configured simulation updates per second"><span>COMPUTE</span><strong>{(1000/(city.simulation.tick_ms || 50)).toFixed(1)} Hz</strong></div>
         <button onClick={() => request(snapshot.paused ? "resume" : "pause")}>{snapshot.paused ? "Resume" : "Pause"}</button>
         <button className="quiet" onClick={() => request("step", { delta: .05 })}>Step</button>
         <button className="quiet" onClick={() => request("reset")}>Reset</button>
@@ -128,9 +129,9 @@ export default function Home() {
     <aside className="right-stack">
       <section className="glass load-overlay">
         <div className="panel-heading"><div><p>TRAFFIC LOAD</p><h2>Population density</h2></div><span>{snapshot.load?.population ?? snapshot.people.length}</span></div>
-        <label className="range-control"><span>Active population <b>{population}</b></span><input type="range" min="20" max="1200" step="20" value={population} onChange={(event) => setPopulation(Number(event.target.value))}/></label>
+        <label className="range-control"><span>Active population <b>{population}</b></span><input type="range" min="20" max="10000" step="20" value={population} onChange={(event) => setPopulation(Number(event.target.value))}/></label>
         <label className="range-control"><span>Spawn rate <b>{spawnRate.toFixed(1)}/s</b></span><input type="range" min="0" max="20" step="0.5" value={spawnRate} onChange={(event) => setSpawnRate(Number(event.target.value))}/></label>
-        <label className="range-control"><span>Population cap <b>{maxPopulation}</b></span><input type="range" min="100" max="2000" step="100" value={maxPopulation} onChange={(event) => setMaxPopulation(Number(event.target.value))}/></label>
+        <label className="range-control"><span>Population cap <b>{maxPopulation}</b></span><input type="range" min="100" max="10000" step="100" value={maxPopulation} onChange={(event) => setMaxPopulation(Number(event.target.value))}/></label>
         <label className="range-control"><span>Vehicle spacing <b>{safeGap.toFixed(0)} m</b></span><input type="range" min="4" max="80" step="2" value={safeGap} onChange={(event) => { const value=Number(event.target.value); setSafeGap(value); request("set_spacing",{safe_gap:value}); }}/></label>
         <button className="apply-load" onClick={applyLoad}>Apply traffic load</button>
       </section>

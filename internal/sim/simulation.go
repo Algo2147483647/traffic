@@ -587,12 +587,7 @@ func (s *Simulation) resetLocked(population int) {
 	if population > s.maxPeople {
 		s.maxPeople = population
 	}
-	for i := 0; i < population; i++ {
-		person := &personState{id: s.nextID}
-		s.nextID++
-		s.startTripLocked(person)
-		s.people = append(s.people, person)
-	}
+	s.appendPeopleLocked(population)
 	// Populate deterministic next-phase and pressure diagnostics immediately;
 	// callers should not need to advance time before the first snapshot.
 	s.updateSignalsLocked(0)
@@ -603,11 +598,16 @@ func (s *Simulation) spawnLocked(dt float64) {
 		return
 	}
 	s.spawnRemainder += s.spawnRate * dt
+	if s.spawnRemainder < 1 {
+		return
+	}
+	loads := s.currentCongestionLoads()
 	for s.spawnRemainder >= 1 && len(s.people) < s.maxPeople {
 		person := &personState{id: s.nextID}
 		s.nextID++
-		s.startTripLocked(person)
+		s.startTripWithLoadsLocked(person, loads)
 		s.people = append(s.people, person)
+		s.addPersonCongestionLoad(loads, person)
 		s.spawnRemainder--
 	}
 }
@@ -627,14 +627,51 @@ func (s *Simulation) SetLoad(population int, spawnRate float64, maxPopulation in
 	if population > s.maxPeople {
 		population = s.maxPeople
 	}
-	for len(s.people) < population {
-		person := &personState{id: s.nextID}
-		s.nextID++
-		s.startTripLocked(person)
-		s.people = append(s.people, person)
-	}
+	s.appendPeopleLocked(population)
 	if len(s.people) > population {
 		s.people = s.people[:population]
+	}
+}
+
+// appendPeopleLocked plans larger population increases in bounded parallel
+// waves. Every wave reads one immutable congestion snapshot; results are then
+// committed in ID order before the next wave, preserving deterministic output
+// while allowing route searches to use all available CPU cores.
+func (s *Simulation) appendPeopleLocked(target int) {
+	remaining := target - len(s.people)
+	if remaining <= 0 {
+		return
+	}
+	loads := s.currentCongestionLoads()
+	const parallelThreshold = 64
+	for remaining > 0 {
+		if remaining < parallelThreshold {
+			for remaining > 0 {
+				person := &personState{id: s.nextID}
+				s.nextID++
+				s.startTripWithLoadsLocked(person, loads)
+				s.people = append(s.people, person)
+				s.addPersonCongestionLoad(loads, person)
+				remaining--
+			}
+			return
+		}
+		batchSize := min(remaining, 256)
+		batch := make([]*personState, batchSize)
+		for index := range batch {
+			batch[index] = &personState{id: s.nextID}
+			s.nextID++
+		}
+		parallelFor(batchSize, parallelThreshold, func(start, end int) {
+			for index := start; index < end; index++ {
+				s.startTripWithLoadsLocked(batch[index], loads)
+			}
+		})
+		for _, person := range batch {
+			s.people = append(s.people, person)
+			s.addPersonCongestionLoad(loads, person)
+		}
+		remaining -= batchSize
 	}
 }
 
@@ -647,6 +684,10 @@ func (s *Simulation) SetSpacing(safeGap float64) {
 }
 
 func (s *Simulation) startTripLocked(person *personState) {
+	s.startTripWithLoadsLocked(person, s.currentCongestionLoads())
+}
+
+func (s *Simulation) startTripWithLoadsLocked(person *personState, loads map[string]wayCongestionLoad) {
 	person.trip++
 	rng := rand.New(rand.NewSource(tripSeed(s.graph.Simulation.Seed, person.id, person.trip)))
 	for attempt := 0; attempt < 32; attempt++ {
@@ -661,10 +702,13 @@ func (s *Simulation) startTripLocked(person *personState) {
 		start.Position, start.Tangent = start.Way.Sample(start.Along, start.Lane)
 		finish.Position, finish.Tangent = finish.Way.Sample(finish.Along, finish.Lane)
 		direct := start.Way.ID == finish.Way.ID && finish.Along > start.Along+1
-		connected, ok := s.graph.RouteBetweenWays(start.Way.ID, finish.Way.ID, direct)
+		var connected []*model.Way
+		ok := false
 		var plannedLanes []int
-		if !direct && start.Way.ID != finish.Way.ID {
-			if balanced, lanes, found := s.congestionRoute(start.Way.ID, finish.Way.ID, "", -1); found {
+		if direct {
+			connected, ok = s.graph.RouteBetweenWays(start.Way.ID, finish.Way.ID, true)
+		} else if start.Way.ID != finish.Way.ID {
+			if balanced, lanes, found := s.congestionRouteWithLoads(start.Way.ID, finish.Way.ID, "", -1, loads); found {
 				connected = make([]*model.Way, len(balanced))
 				for index, wayID := range balanced {
 					connected[index] = s.graph.Ways[wayID]
@@ -672,6 +716,9 @@ func (s *Simulation) startTripLocked(person *personState) {
 				plannedLanes = lanes
 				ok = true
 			}
+		}
+		if !ok {
+			connected, ok = s.graph.RouteBetweenWays(start.Way.ID, finish.Way.ID, false)
 		}
 		if !ok {
 			continue
@@ -742,23 +789,28 @@ func (s *Simulation) Snapshot() Snapshot {
 	snapshot := Snapshot{City: s.graph.Name, Time: s.time, Tick: s.tick, Paused: s.paused, TimeScale: s.timeScale,
 		Load:    LoadState{Population: len(s.people), SpawnRate: s.spawnRate, MaxPopulation: s.maxPeople},
 		Spacing: SpacingState{SafeGap: s.safeGap, VehicleSize: s.graph.Simulation.VehicleSize},
-		People:  make([]Person, 0, len(s.people)), Signals: s.signalStates()}
-	for _, state := range s.people {
-		pose := model.Transform(state.position, state.heading)
-		reference := s.referenceFor(state.position, state.wayID)
-		person := Person{
-			ID: state.id, State: state.state, Position: state.position, Speed: state.speed,
-			Heading: math.Atan2(state.heading.Y, state.heading.X) * 180 / math.Pi,
-			WayID:   state.wayID, Lane: state.lane, LanePosition: state.lanePosition, Along: state.along, Transform: pose,
-			Reference: Reference{IntersectionID: reference.ID, IntersectionTransform: reference.Transform,
-				LocalTransform: model.RelativeTo(reference.Position, pose)}, WaitingFor: state.waitingFor,
-			WaitingSignal: state.waitingSignal, WaitingReason: state.waitingReason, Origin: state.origin, Destination: state.destination,
-			Route: append([]string(nil), state.route...), RouteIndex: state.routeIndex, Trip: state.trip,
+		People:  make([]Person, len(s.people)), Signals: s.signalStates()}
+	parallelFor(len(s.people), 256, func(start, end int) {
+		for index := start; index < end; index++ {
+			state := s.people[index]
+			pose := model.Transform(state.position, state.heading)
+			reference := s.referenceFor(state.position, state.wayID)
+			person := Person{
+				ID: state.id, State: state.state, Position: state.position, Speed: state.speed,
+				Heading: math.Atan2(state.heading.Y, state.heading.X) * 180 / math.Pi,
+				WayID:   state.wayID, Lane: state.lane, LanePosition: state.lanePosition, Along: state.along, Transform: pose,
+				Reference: Reference{IntersectionID: reference.ID, IntersectionTransform: reference.Transform,
+					LocalTransform: model.RelativeTo(reference.Position, pose)}, WaitingFor: state.waitingFor,
+				WaitingSignal: state.waitingSignal, WaitingReason: state.waitingReason, Origin: state.origin, Destination: state.destination,
+				Route: append([]string(nil), state.route...), RouteIndex: state.routeIndex, Trip: state.trip,
+			}
+			if state.laneChanging {
+				person.LaneChange = &LaneChange{FromLane: state.laneChangeFrom, ToLane: state.laneChangeTo, Progress: state.laneChangeProgress, Reason: state.laneChangeReason}
+			}
+			snapshot.People[index] = person
 		}
-		if state.laneChanging {
-			person.LaneChange = &LaneChange{FromLane: state.laneChangeFrom, ToLane: state.laneChangeTo, Progress: state.laneChangeProgress, Reason: state.laneChangeReason}
-		}
-		snapshot.People = append(snapshot.People, person)
+	})
+	for _, person := range snapshot.People {
 		snapshot.Stats.AverageSpeed += person.Speed
 		switch person.State {
 		case "walking_to_lane", "walking_to_destination":

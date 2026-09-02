@@ -287,29 +287,32 @@ func (s *Simulation) advanceRoadVehiclesLocked(dt float64) {
 		}
 	}
 	sort.Slice(active, func(i, j int) bool { return active[i].id < active[j].id })
-	for _, person := range active {
-		constraint := constraints[person]
-		way := s.graph.Ways[person.wayID]
-		desiredSpeed := math.Min(s.graph.Simulation.DriveSpeed, way.SpeedLimit)
-		target := s.roadTarget(person, way)
-		allowedSpeed := math.Min(constraint.speed, math.Max(0, (target-person.along)/dt))
-		person.speed, person.waitingFor = allowedSpeed, 0
-		if allowedSpeed < desiredSpeed*.08 {
-			person.state = "waiting"
-			person.waitingFor = constraint.leaderID
-			if constraint.leaderID != 0 {
-				person.waitingReason = "leader queue"
-			} else if person.waitingSignal == "" && person.waitingReason == "" {
-				person.waitingReason = "road end"
+	parallelFor(len(active), 256, func(start, end int) {
+		for index := start; index < end; index++ {
+			person := active[index]
+			constraint := constraints[person]
+			way := s.graph.Ways[person.wayID]
+			desiredSpeed := math.Min(s.graph.Simulation.DriveSpeed, way.SpeedLimit)
+			target := s.roadTarget(person, way)
+			allowedSpeed := math.Min(constraint.speed, math.Max(0, (target-person.along)/dt))
+			person.speed, person.waitingFor = allowedSpeed, 0
+			if allowedSpeed < desiredSpeed*.08 {
+				person.state = "waiting"
+				person.waitingFor = constraint.leaderID
+				if constraint.leaderID != 0 {
+					person.waitingReason = "leader queue"
+				} else if person.waitingSignal == "" && person.waitingReason == "" {
+					person.waitingReason = "road end"
+				}
+			} else {
+				person.state, person.waitingReason = "driving", ""
+				if person.along < s.stopLine(way)-0.001 {
+					person.waitingSignal = ""
+					person.signalWait = 0
+				}
 			}
-		} else {
-			person.state, person.waitingReason = "driving", ""
-			if person.along < s.stopLine(way)-0.001 {
-				person.waitingSignal = ""
-				person.signalWait = 0
-			}
+			person.along = math.Min(target, person.along+allowedSpeed*dt)
+			person.position, person.heading = way.SampleLane(person.along, person.lanePosition)
 		}
-		person.along = math.Min(target, person.along+allowedSpeed*dt)
-		person.position, person.heading = way.SampleLane(person.along, person.lanePosition)
-	}
+	})
 }

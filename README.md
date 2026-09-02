@@ -210,13 +210,19 @@ lanes for car-following, and is exposed as `lane_position` plus `lane_change` in
 person snapshots. Near an intersection, opportunistic passing is suppressed so
 vehicles remain in a lane compatible with their next route movement.
 
+The live population controls accept up to 10,000 active people. Large load
+increases plan routes in deterministic parallel waves, congestion costs use a
+single per-way load snapshot, and both road-state commits and public snapshot
+conversion are split across the available CPU cores.
+
 The edge-to-edge canvas supports mouse or touch dragging, cursor-centered wheel zoom,
 pinch-to-zoom, dedicated zoom controls, fit-to-city, and browser full-screen
 mode. The camera range is 3%–6400% of the fitted city view. Lane boundaries,
 direction arrows, turn-lane markings, stop lines, signal lamps, ramp gore
-hatching, cubic lane connectors, and vehicle bodies all use world units, so
-they scale together. Junction surfaces are approach-shaped polygons instead of
-generic circles.
+hatching, cubic Bézier road paths and lane connectors, and vehicle bodies all
+use world units, so they scale together. The top bar reports measured simulation
+updates per second alongside its configured target. Junction surfaces are
+approach-shaped polygons instead of generic circles.
 
 ## JSON input
 
@@ -301,7 +307,7 @@ Control examples:
 { "action": "step", "delta": 0.05 }
 { "action": "reset", "population": 120 }
 { "action": "set_time_scale", "time_scale": 10 }
-{ "action": "set_load", "population": 500, "spawn_rate_per_second": 4, "max_population": 1200 }
+{ "action": "set_load", "population": 500, "spawn_rate_per_second": 4, "max_population": 10000 }
 { "action": "set_spacing", "safe_gap": 4 }
 ```
 

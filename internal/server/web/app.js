@@ -8,6 +8,7 @@
   const state = {
     city: null, snapshot: null, selected: null, showTransforms: false, transform: null,
     camera: { zoom: 1, panX: 0, panY: 0 }, pointers: new Map(), laneDirections: new Map(), presetID: null,
+    compute: { tick: null, measuredAt: 0, hz: null },
   };
 
   function setConnection(status, label) {
@@ -59,8 +60,20 @@
     draw();
   }
 
+  function traceBezier(points, tension = .55) {
+    if (!points.length) return;
+    ctx.moveTo(points[0].x, points[0].y);
+    if (points.length === 1) return;
+    for (let index = 0; index < points.length - 1; index++) {
+      const before = points[Math.max(0, index - 1)], start = points[index], end = points[index + 1], after = points[Math.min(points.length - 1, index + 2)];
+      const control1 = { x: start.x + (end.x - before.x) * tension / 6, y: start.y + (end.y - before.y) * tension / 6 };
+      const control2 = { x: end.x - (after.x - start.x) * tension / 6, y: end.y - (after.y - start.y) * tension / 6 };
+      ctx.bezierCurveTo(control1.x, control1.y, control2.x, control2.y, end.x, end.y);
+    }
+  }
+
   function drawPolyline(points) {
-    points.forEach((point, index) => { const p = screen(point); if (!index) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+    traceBezier(points.map(screen));
   }
 
   function wayLength(way) {
@@ -85,10 +98,12 @@
 
   function drawWayRange(way, from, to, lane, color, width, extraOffset = 0) {
     ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.beginPath();
-    for (let index = 0; index <= 10; index++) {
-      const p = screen(sampleWay(way, from + (to - from) * index / 10, lane, extraOffset));
-      if (!index) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    const distance = Math.abs(to - from), steps = Math.max(4, Math.min(36, Math.ceil(distance / 160)));
+    const points = [];
+    for (let index = 0; index <= steps; index++) {
+      points.push(screen(sampleWay(way, from + (to - from) * index / steps, lane, extraOffset)));
     }
+    traceBezier(points);
     ctx.stroke();
   }
 
@@ -383,6 +398,7 @@
 
   function updateSnapshot(snapshot) {
     state.snapshot = snapshot;
+    updateComputeRate(snapshot);
     const minutes = Math.floor(snapshot.time / 60).toString().padStart(2, "0"), seconds = (snapshot.time % 60).toFixed(1).padStart(4, "0");
     $("sim-time").textContent = `${minutes}:${seconds}`; $("people-count").textContent = snapshot.people.length;
     $("driving-count").textContent = snapshot.stats.driving; $("walking-count").textContent = snapshot.stats.walking;
@@ -395,13 +411,29 @@
     refreshInspector(); draw();
   }
 
+  function updateComputeRate(snapshot) {
+    const now = performance.now(), target = 1000 / Math.max(1, Number(state.city?.simulation?.tick_ms || 50));
+    if (state.compute.tick !== null && snapshot.tick >= state.compute.tick && now > state.compute.measuredAt) {
+      const measured = (snapshot.tick - state.compute.tick) * 1000 / (now - state.compute.measuredAt);
+      if (Number.isFinite(measured)) state.compute.hz = state.compute.hz === null ? measured : state.compute.hz * .72 + measured * .28;
+    }
+    state.compute.tick = snapshot.tick; state.compute.measuredAt = now;
+    const measured = snapshot.paused ? 0 : state.compute.hz;
+    $("compute-rate").textContent = `${(measured ?? target).toFixed(1)} Hz`;
+    $("compute-rate").parentElement.title = `Measured simulation updates per second · target ${target.toFixed(1)} Hz`;
+  }
+
   function updateCity(city) {
     state.city = city; state.laneDirections = buildLaneDirections(city); $("city-name").textContent = city.name; $("city-description").textContent = city.description;
     $("intersection-count").textContent = city.intersections.length; $("way-count").textContent = city.ways.length;
     $("lane-count").textContent = city.edges.reduce((sum, edge) => sum + edge.weight, 0);
+    state.compute = { tick: null, measuredAt: performance.now(), hz: null };
+    const targetHz = 1000 / Math.max(1, Number(city.simulation.tick_ms || 50));
+    $("compute-rate").textContent = `${targetHz.toFixed(1)} Hz`;
+    $("population-control").max = 10000;
     $("population-control").value = city.simulation.people; $("population-value").textContent = city.simulation.people;
     $("spawn-rate-control").value = city.simulation.spawn_rate_per_second || 0; $("spawn-rate-value").textContent = `${Number(city.simulation.spawn_rate_per_second || 0).toFixed(1)}/s`;
-    $("max-population-control").max = Math.max(2000, city.simulation.max_people);
+    $("max-population-control").max = 10000;
     $("max-population-control").value = city.simulation.max_people; $("max-population-value").textContent = city.simulation.max_people;
     $("safe-gap-control").value = city.simulation.safe_gap; $("safe-gap-value").textContent = `${city.simulation.safe_gap} m`;
     fitCanvas();
