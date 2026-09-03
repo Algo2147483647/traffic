@@ -1,24 +1,32 @@
 package model
 
-import "testing"
+import (
+	"math"
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestMetropolitanGridPresetStructure(t *testing.T) {
-	config := MetropolitanGridConfig()
+	config, err := LoadConfig("../../configs/presets/atlas-metropolitan-grid.json")
+	if err != nil {
+		t.Fatal(err)
+	}
 	graph, err := BuildGraph(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(graph.Intersections) != 121 {
-		t.Fatalf("intersections = %d, want 121", len(graph.Intersections))
+	if len(graph.Intersections) != 81 {
+		t.Fatalf("intersections = %d, want 81", len(graph.Intersections))
 	}
-	if len(graph.Ways) != 336 {
-		t.Fatalf("directed ways = %d, want 336", len(graph.Ways))
+	if len(graph.Ways) != 288 {
+		t.Fatalf("directed ways = %d, want 288", len(graph.Ways))
 	}
-	if width := graph.Intersections["G04"].Position.X - graph.Intersections["G00"].Position.X; width != 16000 {
-		t.Fatalf("core width = %.0f m, want 16000 m", width)
+	if width := graph.Intersections["N00_08"].Position.X - graph.Intersections["N00_00"].Position.X; width != 16000 {
+		t.Fatalf("grid width = %.0f m, want 16000 m", width)
 	}
-	if height := graph.Intersections["G40"].Position.Y - graph.Intersections["G00"].Position.Y; height != 16000 {
-		t.Fatalf("core height = %.0f m, want 16000 m", height)
+	if height := graph.Intersections["N08_00"].Position.Y - graph.Intersections["N00_00"].Position.Y; height != 16000 {
+		t.Fatalf("grid height = %.0f m, want 16000 m", height)
 	}
 
 	classCount := map[string]int{}
@@ -26,38 +34,64 @@ func TestMetropolitanGridPresetStructure(t *testing.T) {
 	for _, way := range graph.Ways {
 		classCount[way.RoadClass]++
 		totalLanes += way.Lanes
-		if way.RoadClass == "arterial" && way.Lanes != 4 {
-			t.Errorf("arterial %s has %d lanes per direction, want 4", way.ID, way.Lanes)
+		from := graph.Intersections[way.From].Position
+		to := graph.Intersections[way.To].Position
+		if distance := math.Hypot(to.X-from.X, to.Y-from.Y); distance != 2000 {
+			t.Errorf("road %s length = %.0f m, want 2000 m", way.ID, distance)
 		}
-		if (way.RoadClass == "local" || way.RoadClass == "collector" || way.RoadClass == "ramp") && (way.From[0] == 'G' || way.To[0] == 'G') {
-			t.Errorf("peripheral %s road %s connects directly to a core junction", way.RoadClass, way.ID)
+
+		line := int(from.Y / 2000)
+		if from.X == to.X {
+			line = int(from.X / 2000)
 		}
-		for _, point := range way.Points {
-			if point.X < 1000 || point.X > 17000 || point.Y < 1000 || point.Y > 17000 {
-				t.Errorf("road %s expands beyond the 16 km core: %+v", way.ID, point)
-			}
+		wantClass, wantLanes := "collector", 3
+		if line%2 == 0 {
+			wantClass, wantLanes = "arterial", 4
 		}
-	}
-	if totalLanes != 864 {
-		t.Fatalf("directed lane count = %d, want 864", totalLanes)
-	}
-	for _, class := range []string{"arterial", "ramp", "collector", "local"} {
-		if classCount[class] == 0 {
-			t.Errorf("preset has no %s roads", class)
+		if way.RoadClass != wantClass || way.Lanes != wantLanes {
+			t.Errorf("road %s on line %d = %s/%d lanes, want %s/%d", way.ID, line, way.RoadClass, way.Lanes, wantClass, wantLanes)
 		}
 	}
 
-	path, ok := graph.ShortestPath("A00", "B33")
-	if !ok {
-		t.Fatal("no north-to-south hierarchical route")
+	if got := classCount["arterial"]; got != 160 {
+		t.Fatalf("arterial directed ways = %d, want 160", got)
 	}
-	seen := map[string]bool{}
-	for _, way := range path {
-		seen[way.RoadClass] = true
+	if got := classCount["collector"]; got != 128 {
+		t.Fatalf("collector directed ways = %d, want 128", got)
 	}
-	for _, class := range []string{"local", "collector", "ramp", "arterial"} {
-		if !seen[class] {
-			t.Errorf("cross-city route never uses %s roads: %v", class, seen)
+	if got := classCount["local"]; got != 0 {
+		t.Fatalf("local directed ways = %d, want 0", got)
+	}
+	if totalLanes != 1024 {
+		t.Fatalf("directed lane count = %d, want 1024", totalLanes)
+	}
+
+	path, ok := graph.ShortestPath("N00_00", "N08_08")
+	if !ok || len(path) == 0 {
+		t.Fatal("no route across the complete nested grid")
+	}
+}
+
+func TestLoadPresetDirectoryUsesJSONFilenamesAsStableIDs(t *testing.T) {
+	directory := t.TempDir()
+	for name, contents := range map[string]string{
+		"20-second.json": `{"name":"Second"}`,
+		"10-first.JSON":  `{"name":"First"}`,
+		"notes.txt":      "ignored",
+	} {
+		if err := os.WriteFile(filepath.Join(directory, name), []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
 		}
+	}
+
+	presets, err := LoadPresetDirectory(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(presets) != 2 {
+		t.Fatalf("loaded presets = %d, want 2", len(presets))
+	}
+	if presets[0].ID != "10-first" || presets[0].Config.Name != "First" || presets[1].ID != "20-second" {
+		t.Fatalf("unexpected preset order or identity: %+v", presets)
 	}
 }

@@ -20,13 +20,16 @@ The top-bar map selector exposes two live presets:
 
 - **Preset 1 — Meridian Hierarchy** keeps the JSON map supplied through
   `-config` (the existing `configs/meridian-city.json` by default).
-- **Preset 2 — Atlas Metropolitan Grid** provides a 16 km, four-by-four core
-  expressway grid with four lanes per direction. Each of its 16 grid cells
-  contains an internal district network connected through independent
-  mid-block ramps, collectors, and local branches; supporting roads never
-  terminate at a core intersection or expand the city footprint. Switching
-  presets resets vehicles and signal controllers to that map's initial state
-  without restarting the server.
+- **Preset 2 — Atlas Metropolitan Grid** provides a 16 km, four-by-four main
+  grid with four lanes per direction. Roads at 2 km intervals subdivide each
+  main cell with three lanes per direction; the former 1 km local grid has
+  been removed. Switching presets resets vehicles and signal controllers to
+  that map's initial state without restarting the server.
+
+Additional presets are ordinary city JSON files in `configs/presets/`. The
+server discovers all `*.json` files in filename order at startup, using each
+filename (without `.json`) as its preset ID. Add a file to extend the selector,
+or point `-preset-dir` at another directory; no Go code change is required.
 
 ```bash
 go test ./cmd/... ./internal/...
@@ -317,7 +320,8 @@ Control examples:
 cmd/traffic/                 executable entry point
 cmd/traffic-bench/           seeded fixed-time/adaptive A/B benchmark
 cmd/traffic-observe/         real-time congestion observer and JSON report
-configs/                     JSON city inputs
+configs/                     primary JSON city input
+configs/presets/             auto-discovered JSON map presets
 internal/model/              graph, intersection, segment, and matrix model
 internal/sim/                spawning, walking, driving, queuing, snapshots
 internal/server/             HTTP/SSE API and embedded HTML UI

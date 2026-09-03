@@ -120,7 +120,7 @@ export default function Home() {
     </header>
 
     <section className="glass stats-overlay" aria-label="Live traffic statistics">
-      <div className="stat-primary"><strong>{snapshot.people.length}</strong><span>population</span></div>
+      <div className="stat-primary"><strong>{snapshot.load?.population ?? snapshot.people.length}</strong><span>population</span></div>
       <div className="stat-row"><span><i className="dot driving"/>Driving <b>{snapshot.stats.driving}</b></span><span><i className="dot waiting"/>Waiting <b>{snapshot.stats.waiting}</b></span><span><i className="dot walking"/>Walking <b>{snapshot.stats.walking}</b></span></div>
       <div className="stat-meta"><span>{snapshot.stats.average_speed.toFixed(1)} avg speed</span><span>{city.ways.length} ways / {city.intersections.length} signals</span></div>
       {snapshot.control_performance && <div className="efficiency-row"><span><b>{snapshot.control_performance.current_signal_queue}</b> signal queue</span><span><b>{snapshot.control_performance.throughput_per_minute.toFixed(1)}</b> trips/min</span><span><b>{snapshot.control_performance.mean_signal_delay_seconds.toFixed(1)}s</b> mean signal delay</span></div>}
