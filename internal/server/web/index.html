@@ -12,7 +12,6 @@
     <canvas id="city-canvas" tabindex="0" aria-label="Interactive lane-level map of Meridian City traffic"></canvas>
 
     <header class="glass top-overlay">
-      <div class="brand-lockup"><span class="mark" aria-hidden="true">M</span><div><p class="eyebrow">Traffic field / Go live</p><h1 id="city-name">Meridian City</h1></div></div>
       <div class="simulation-controls" aria-label="Simulation controls">
         <label class="select-control preset-control">MAP<select id="map-preset" aria-label="Map preset" disabled><option>Loading maps…</option></select></label>
         <span class="divider"></span>
@@ -50,7 +49,6 @@
       </section>
 
       <section class="glass inspector-overlay">
-        <p id="city-description" class="sr-only"></p>
         <div id="empty-inspector" class="empty-state">Select a vehicle or junction</div>
         <div id="person-inspector" hidden>
           <div class="panel-heading"><div><p>PERSON / VEHICLE</p><h2 id="person-id">P-000</h2></div><span id="person-state">DRIVING</span></div>
@@ -59,14 +57,14 @@
         </div>
         <div id="signal-inspector" hidden>
           <div class="panel-heading"><div><p>SIGNAL PLAN</p><h2 id="signal-name">Intersection A</h2></div><span id="signal-countdown">0.0s</span></div>
-          <p id="signal-phase" class="active-phase">Current phase</p><p id="signal-next" class="next-phase">Next phase</p><p id="signal-basis" class="next-phase">Planning basis</p>
+          <p id="signal-phase" class="active-phase">Current phase</p><p id="signal-next" class="next-phase">Next phase</p>
           <div class="controller-card"><div><span>Controller</span><strong id="signal-controller">—</strong></div><div><span>Decision</span><strong id="signal-decision">—</strong></div><div><span>Green target</span><strong id="signal-green-target">—</strong></div><div><span>Pressure</span><strong id="signal-pressure">—</strong></div></div>
-          <div id="signal-plan" class="signal-plan"></div><p class="matrix-label">PERMITTED MOVEMENTS</p><div id="signal-movements" class="movement-list"></div>
+          <div id="signal-plan" class="signal-plan"></div><p class="matrix-label">SIGNAL PHASES · ALL PERMITTED MOVEMENTS</p><div id="signal-movements" class="movement-list"></div>
         </div>
       </section>
     </aside>
 
-    <div class="glass map-key"><span><i class="dot driving"></i>Vehicle</span><span><i class="dot walking"></i>On foot</span><span><i class="dot waiting"></i>Stopped</span><span><i class="flow-line"></i>Permitted turn</span><label><input id="show-transforms" type="checkbox">Axes</label></div>
+    <div class="glass map-key"><label><input id="show-transforms" type="checkbox">Axes</label></div>
     <p class="map-help">Drag to pan · wheel or pinch to zoom · select a vehicle or junction</p>
   </main>
   <script src="/app.js" defer></script>

@@ -1,0 +1,52 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { startBackend } = require('../backend.cjs');
+
+test('bundled engine authenticates, simulates, switches presets, streams, and exits with parent', { timeout: 90000 }, async t => {
+  const platform = process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux';
+  const backend = await startBackend({ runtime: path.resolve(__dirname, '../runtime', `${platform}-${process.arch}`), configs: path.resolve(__dirname, '../../configs') });
+  t.after(() => backend.stop());
+  const headers = { 'X-Traffic-Token': backend.token, 'Content-Type': 'application/json' };
+  const get = async route => {
+    const r = await fetch(backend.url + route, { headers });
+    assert.equal(r.status, 200); return r.json();
+  };
+  const control = async body => {
+    const r = await fetch(backend.url + '/api/control', { method: 'POST', headers, body: JSON.stringify(body) });
+    assert.equal(r.status, 200); return r.json();
+  };
+  assert.equal((await fetch(backend.url + '/api/health')).status, 401);
+  assert.equal((await get('/api/health')).status, 'ok');
+  const html = await fetch(backend.url, { headers });
+  assert.match(html.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.match(await html.text(), /city-canvas/);
+  await control({ action: 'pause' });
+  const paused = await get('/api/snapshot');
+  assert.equal(paused.paused, true);
+  await control({ action: 'step', delta: 0.05 });
+  assert.ok((await get('/api/snapshot')).time > paused.time);
+  const presets = await get('/api/presets');
+  assert.ok(presets.presets.length >= 2);
+  await control({ action: 'set_preset', preset_id: presets.presets[1].id });
+  assert.equal((await get('/api/city')).name, presets.presets[1].name);
+  const abort = new AbortController();
+  const stream = await fetch(backend.url + '/api/stream', { headers, signal: abort.signal });
+  const { value } = await stream.body.getReader().read();
+  assert.match(new TextDecoder().decode(value), /event: city/);
+  abort.abort();
+  // EOF also occurs when the owning Electron process crashes. No HTTP shutdown
+  // endpoint or OS-specific process-tree utilities should be needed.
+  backend.child.stdin.end();
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Engine survived parent pipe closure')), 5000);
+    backend.child.once('exit', () => { clearTimeout(timer); resolve(); });
+  });
+  await backend.stop();
+  assert.notEqual(backend.child.exitCode, null);
+  await assert.rejects(fetch(backend.url + '/api/health', { headers }));
+});
+
+test('missing engine rejects startup without hanging', async () => {
+  await assert.rejects(startBackend({ runtime: path.join(__dirname, 'missing'), configs: __dirname }), /ENOENT/);
+});

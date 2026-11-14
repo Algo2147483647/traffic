@@ -42,3 +42,12 @@ yarn-error.log*
 /traffic
 /traffic.exe
 *.tsbuildinfo
+
+# Desktop build outputs
+/desktop/node_modules/
+/desktop/runtime/
+/desktop/dist/
+/desktop/dist-updated/
+/desktop/dist-junction/
+/desktop/dist-junction-focus/
+/desktop/dist-phases/

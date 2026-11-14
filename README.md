@@ -4,12 +4,80 @@ A traffic simulation with a Go backend, a directed lane-weighted road graph,
 N-way intersection geometry and signal plans, live Server-Sent Events, and an
 interactive full-screen HTML canvas UI.
 
-## Run it
+## Desktop application (Windows / macOS)
+
+The standalone application follows the `math-agent-platform` desktop approach:
+an Electron window owns a bundled computation engine. Traffic uses its existing
+Go engine and embedded canvas UI, so installed users need neither Go, Node.js,
+an external browser, nor a separately started server. All city presets ship with
+the application. The optional web preview remains a separate project.
+
+For development, install **Node.js 22.13+** and **Go 1.24+**:
+
+```bash
+cd desktop
+npm ci
+npm start
+```
+
+From the repository root, `npm run desktop` also starts the desktop application
+after its dependencies have been installed. Windows uses a native standalone
+window; on macOS, closing the window keeps the app and simulation running until
+Quit (Cmd+Q), and clicking the Dock icon reopens it. Launching the app again
+focuses the existing instance. View provides reload and fullscreen controls.
+
+### Packaging
+
+Run on the corresponding operating system:
+
+```bash
+# Windows x64: creates an NSIS installer
+npm --prefix desktop run dist:win
+
+# macOS: creates separate Intel (x64) and Apple Silicon (arm64) DMGs
+npm --prefix desktop run dist:mac
+
+# Local unpacked application for checking packaged resources
+npm --prefix desktop run pack
+```
+
+Outputs are in `desktop/dist/`. A packaging hook compiles the Go executable for
+each target architecture before copying it and `configs/` into application
+resources. No dependency on the source checkout or its working directory is
+required at runtime. Build macOS DMGs on a Mac; Windows cannot produce or
+validate a signed macOS application. Signing/notarization credentials are not
+included: configure electron-builder signing credentials for public distribution.
+The manual/tag-triggered workflow in `.github/workflows/desktop.yml` checks and
+packages both systems, uploading unsigned build artifacts without publishing.
+
+### Desktop checks and lifecycle
+
+```bash
+go test ./cmd/... ./internal/...
+npm --prefix desktop test
+npm --prefix desktop run smoke
+```
+
+The smoke check opens a real Electron window, verifies map loading, pause/resume,
+and advancing simulation time, captures a PNG in the OS temporary directory,
+and quits. Set `TRAFFIC_SMOKE_OUTPUT` to choose its screenshot path. The packaged
+executable also accepts `--smoke-test` to test bundled resources directly.
+
+The engine binds only to a random `127.0.0.1` port in desktop mode. A per-launch
+secret is injected into requests by the Electron session and is not exposed to
+page JavaScript. Renderer Node integration is disabled, context isolation and
+sandboxing are enabled, and navigation/new windows are restricted following
+[Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security).
+The parent pipe closes on app exit or crash, which shuts down the simulation and
+SSE streams; a bounded forced-stop fallback handles unresponsive engines.
+Startup/engine errors appear in a native error dialog.
+
+## Run the local HTTP service
 
 Requirements: Go 1.24 or newer.
 
 ```bash
-go run ./cmd/traffic -config configs/meridian-city.json -addr :8080
+go run ./cmd/traffic -config configs/meridian-city.json -addr 127.0.0.1:8080
 ```
 
 Open [http://localhost:8080](http://localhost:8080). The HTML, CSS, and
@@ -318,6 +386,7 @@ Control examples:
 
 ```text
 cmd/traffic/                 executable entry point
+desktop/                     Electron window, engine lifecycle, installers and smoke checks
 cmd/traffic-bench/           seeded fixed-time/adaptive A/B benchmark
 cmd/traffic-observe/         real-time congestion observer and JSON report
 configs/                     primary JSON city input

@@ -6,6 +6,10 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "desktop": "npm --prefix desktop start",
+    "desktop:test": "npm --prefix desktop test",
+    "desktop:win": "npm --prefix desktop run dist:win",
+    "desktop:mac": "npm --prefix desktop run dist:mac",
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",

@@ -1,0 +1,37 @@
+{
+  "name": "meridian-traffic-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone lane-level city traffic simulator",
+  "author": "Traffic Project",
+  "main": "main.cjs",
+  "engines": { "node": ">=22.13.0" },
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "start": "npm run build && electron .",
+    "test": "npm run build && node --test tests/*.test.cjs",
+    "smoke": "npm run build && electron . --smoke-test",
+    "pack": "electron-builder --dir",
+    "dist:win": "electron-builder --win nsis --x64",
+    "dist:mac": "electron-builder --mac dmg --x64 --arm64"
+  },
+  "devDependencies": {
+    "electron": "45.3.2",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "local.traffic.meridian",
+    "productName": "Meridian Traffic",
+    "asar": true,
+    "files": ["main.cjs", "backend.cjs"],
+    "beforePack": "scripts/before-pack.cjs",
+    "directories": { "output": "dist" },
+    "extraResources": [
+      { "from": "runtime/${os}-${arch}", "to": "traffic-runtime" },
+      { "from": "../configs", "to": "configs", "filter": ["**/*.json"] }
+    ],
+    "win": { "target": "nsis", "artifactName": "Meridian-Traffic-${version}-Windows-${arch}.${ext}" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true },
+    "mac": { "target": "dmg", "category": "public.app-category.education", "artifactName": "Meridian-Traffic-${version}-macOS-${arch}.${ext}" }
+  }
+}

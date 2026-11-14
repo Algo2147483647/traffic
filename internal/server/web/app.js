@@ -3,7 +3,7 @@
 
   const canvas = document.querySelector("#city-canvas");
   const dashboard = document.querySelector(".dashboard");
-  const ctx = canvas.getContext("2d");
+  let ctx = canvas.getContext("2d");
   const $ = (id) => document.getElementById(id);
   const state = {
     city: null, snapshot: null, selected: null, showTransforms: false, transform: null,
@@ -96,8 +96,8 @@
     return { ...way.points[0], tx: 1, ty: 0 };
   }
 
-  function drawWayRange(way, from, to, lane, color, width, extraOffset = 0) {
-    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.beginPath();
+  function drawWayRange(way, from, to, lane, color, width, extraOffset = 0, lineCap = "round") {
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = lineCap; ctx.lineJoin = "round"; ctx.beginPath();
     const distance = Math.abs(to - from), steps = Math.max(4, Math.min(36, Math.ceil(distance / 160)));
     const points = [];
     for (let index = 0; index <= steps; index++) {
@@ -123,11 +123,8 @@
   }
 
   function drawBackdrop(width, height) {
-    ctx.fillStyle = "#101b18"; ctx.fillRect(0, 0, width, height);
-    const spacing = Math.max(18, 34 * Math.min(3, state.camera.zoom));
-    ctx.strokeStyle = "rgba(216,232,221,.045)"; ctx.lineWidth = 1;
-    for (let x = ((currentTransform().ox % spacing) + spacing) % spacing; x < width; x += spacing) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); }
-    for (let y = ((currentTransform().oy % spacing) + spacing) % spacing; y < height; y += spacing) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
+    ctx.fillStyle = "#080808"; ctx.fillRect(0, 0, width, height);
+
   }
 
   function drawWays() {
@@ -135,26 +132,20 @@
     const minimumWidths = { arterial: 4.8, ramp: 3.2, collector: 2.6, local: 1.35 };
     state.city.ways.forEach((way) => {
       const length = wayLength(way), centre = (way.lanes - 1) / 2;
+      const radius = state.city.simulation.intersection_radius || 22;
+      const start = Math.min(radius, length/2), end = Math.max(start, length-radius);
       const physicalWidth = way.lanes * way.lane_width * scale;
       const width = Math.max(physicalWidth, minimumWidths[way.road_class] || 1.35);
-      drawWayRange(way, 0, length, centre, "rgba(218,229,222,.28)", width + Math.max(.8, 1.8 * scale));
-      drawWayRange(way, 0, length, centre, way.road_class === "arterial" ? "#17231f" : "#15211e", width);
+      drawWayRange(way, start, end, centre, "rgba(218,218,218,.3)", width + .8 * scale, 0, "butt");
+      drawWayRange(way, start, end, centre, "#121212", Math.max(.1, width - .8 * scale), 0, "butt");
       if (way.lane_width * scale >= 1.2) {
         for (let boundary = 1; boundary < way.lanes; boundary++) {
           ctx.setLineDash([Math.max(2, 5 * scale), Math.max(2, 5 * scale)]);
-          drawWayRange(way, 0, length, centre, "rgba(218,229,222,.35)", Math.max(.45, .65 * scale), (boundary - way.lanes / 2) * way.lane_width);
+          drawWayRange(way, start, end, centre, "rgba(218,218,218,.35)", Math.max(.45, .65 * scale), (boundary - way.lanes / 2) * way.lane_width);
           ctx.setLineDash([]);
         }
       }
-      const directionSpacing = Math.max(86, 55 / scale);
-      for (let along = directionSpacing * .65; along < length - directionSpacing * .45; along += directionSpacing) {
-        for (let lane = 0; lane < way.lanes; lane++) {
-          const sample = sampleWay(way, along, lane), p = screen(sample), size = Math.min(4.2, way.lane_width * .58) * scale;
-          if (size < .65) continue;
-          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.atan2(sample.ty, sample.tx)); ctx.strokeStyle = "rgba(224,235,229,.46)"; ctx.lineWidth = .8 * scale;
-          ctx.beginPath(); ctx.moveTo(-size, -size * .55); ctx.lineTo(0, 0); ctx.lineTo(-size, size * .55); ctx.stroke(); ctx.restore();
-        }
-      }
+
     });
   }
 
@@ -163,8 +154,28 @@
     state.city.intersections.forEach((intersection) => {
       const incoming=state.city.ways.filter((way)=>way.to===intersection.id),outgoing=state.city.ways.filter((way)=>way.from===intersection.id),corners=[];
       [...incoming.map((way)=>({way,along:Math.max(0,wayLength(way)-radius)})),...outgoing.map((way)=>({way,along:Math.min(radius,wayLength(way))}))].forEach(({way,along})=>{const sample=sampleWay(way,along,(way.lanes-1)/2),half=way.lanes*way.lane_width/2+2;corners.push({x:sample.x-sample.ty*half,y:sample.y+sample.tx*half},{x:sample.x+sample.ty*half,y:sample.y-sample.tx*half});});
+      // Use the mouth edges as anchors, then blend the curb between approaches.
       corners.sort((a,b)=>Math.atan2(a.y-intersection.position.y,a.x-intersection.position.x)-Math.atan2(b.y-intersection.position.y,b.x-intersection.position.x));
-      ctx.fillStyle="#111c19";ctx.strokeStyle="rgba(220,233,225,.3)";ctx.lineWidth=.8*scale;ctx.beginPath();corners.forEach((corner,index)=>{const p=screen(corner);if(!index)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);});ctx.closePath();ctx.fill();ctx.stroke();
+      const edges = [];
+      [...incoming, ...outgoing].forEach(way => {
+        const inbound = way.to === intersection.id;
+        const sample = sampleWay(way, inbound ? Math.max(0,wayLength(way)-radius) : Math.min(radius,wayLength(way)), (way.lanes-1)/2);
+        const half = way.lanes*way.lane_width/2;
+        for (const side of [-1,1]) edges.push({ x:sample.x-side*sample.ty*half, y:sample.y+side*sample.tx*half, dx:sample.tx*(inbound?1:-1), dy:sample.ty*(inbound?1:-1), way:way.id });
+      });
+      edges.sort((a,b)=>Math.atan2(a.y-intersection.position.y,a.x-intersection.position.x)-Math.atan2(b.y-intersection.position.y,b.x-intersection.position.x));
+      if (!edges.length) return;
+      const traceEdge = (a,b) => {
+        const p=screen(a), q=screen(b);
+        if (a.way===b.way) { ctx.lineTo(q.x,q.y); return; }
+        const handle=Math.min(radius*.65,Math.hypot(a.x-b.x,a.y-b.y)*.35)*scale;
+        ctx.bezierCurveTo(p.x+a.dx*handle,p.y+a.dy*handle,q.x+b.dx*handle,q.y+b.dy*handle,q.x,q.y);
+      };
+      ctx.fillStyle="#121212";ctx.strokeStyle="rgba(218,218,218,.3)";ctx.lineWidth=.8*scale;ctx.lineCap="butt";ctx.lineJoin="round";
+      ctx.beginPath();const first=screen(edges[0]);ctx.moveTo(first.x,first.y);
+      edges.forEach((edge,i)=>traceEdge(edge,edges[(i+1)%edges.length]));ctx.closePath();ctx.fill();
+      // Mouths stay open: only draw curbs between different approaches.
+      edges.forEach((edge,i)=>{const next=edges[(i+1)%edges.length];if(edge.way===next.way)return;ctx.beginPath();const p=screen(edge);ctx.moveTo(p.x,p.y);traceEdge(edge,next);ctx.stroke();});
     });
   }
 
@@ -238,79 +249,29 @@
   function drawLaneDirectionArrow(way, lane, along, turns, arrowLength) {
     const sample = sampleWay(way, along, lane), position = screen(sample), scale = currentTransform().scale;
     const length = arrowLength * scale, laneWidth = way.lane_width * scale;
-    const tailX = -length / 2, branchX = -length * .06;
-    // GB 5768 arrow proportions: narrow 5%-of-length stems and 10%-of-length
-    // straight arrowheads. Lane-width caps keep high-speed markings contained.
-    const shaftWidth = Math.max(.65, Math.min(laneWidth * .13, length * .05));
-    const straightHeadHalf = Math.min(laneWidth * .14, length * .05);
-    const straightBaseX = length * .1;
-    ctx.save();
-    ctx.translate(position.x, position.y);
-    ctx.rotate(Math.atan2(sample.ty, sample.tx));
-    // Keep the complete marking inside the lane even at extreme zoom levels.
-    ctx.beginPath();
-    ctx.rect(-length * .58, -laneWidth * .46, length * 1.16, laneWidth * .92);
-    ctx.clip();
-    ctx.fillStyle = "rgba(244,247,245,.82)";
-    ctx.strokeStyle = "rgba(244,247,245,.82)";
-    ctx.lineWidth = shaftWidth;
-    ctx.lineCap = "butt";
-    ctx.lineJoin = "miter";
-
-    const through = turns.includes("through");
-    ctx.beginPath();
-    ctx.moveTo(tailX, 0);
-    ctx.lineTo(through ? straightBaseX : branchX, 0);
-    ctx.stroke();
-
-    if (through) {
-      ctx.beginPath();
-      ctx.moveTo(length / 2, 0);
-      ctx.lineTo(straightBaseX, -straightHeadHalf);
-      ctx.lineTo(straightBaseX, straightHeadHalf);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    const drawTurn = (sign) => {
-      const tip = { x: length * .42, y: sign * laneWidth * .34 };
-      const elbow = { x: length * .08, y: sign * laneWidth * .17 };
-      const directionX = tip.x - elbow.x, directionY = tip.y - elbow.y;
-      const directionLength = Math.hypot(directionX, directionY);
-      const unitX = directionX / directionLength, unitY = directionY / directionLength;
-      const headLength = Math.min(length * .19, laneWidth * .42);
-      const headHalf = Math.min(length * .055, laneWidth * .14);
-      const base = { x: tip.x - unitX * headLength, y: tip.y - unitY * headLength };
-      const normal = { x: -unitY * headHalf, y: unitX * headHalf };
-      ctx.beginPath();
-      ctx.moveTo(branchX, 0);
-      ctx.lineTo(elbow.x, elbow.y);
-      ctx.lineTo(base.x, base.y);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(tip.x, tip.y);
-      ctx.lineTo(base.x + normal.x, base.y + normal.y);
-      ctx.lineTo(base.x - normal.x, base.y - normal.y);
-      ctx.closePath();
-      ctx.fill();
+    if (laneWidth < 3) return;
+    const shaft = Math.min(laneWidth * .10, length * .045);
+    const head = Math.min(laneWidth * .16, length * .10);
+    ctx.save(); ctx.translate(position.x, position.y); ctx.rotate(Math.atan2(sample.ty, sample.tx));
+    ctx.fillStyle = "#dedede"; ctx.strokeStyle = "#dedede";
+    ctx.lineWidth = shaft; ctx.lineCap = "butt"; ctx.lineJoin = "round";
+    const arrowhead = (x,y,angle) => {
+      ctx.save(); ctx.translate(x,y); ctx.rotate(angle);
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-head*1.8,-head); ctx.lineTo(-head*1.8,head);ctx.closePath();ctx.fill();ctx.restore();
     };
-    if (turns.includes("left")) drawTurn(-1);
-    if (turns.includes("right")) drawTurn(1);
-
+    ctx.beginPath();ctx.moveTo(-length*.48,0);ctx.lineTo(turns.includes("through") ? length*.46-head : 0,0);ctx.stroke();
+    if (turns.includes("through")) arrowhead(length*.46,0,0);
+    for (const [turn,sign] of [["left",-1],["right",1]]) if (turns.includes(turn)) {
+      const tipY=sign*laneWidth*.36, x=length*.12;
+      ctx.beginPath();ctx.moveTo(-length*.12,0);
+      ctx.quadraticCurveTo(x,0,x,sign*laneWidth*.14);
+      ctx.lineTo(x,tipY-sign*head);ctx.stroke();arrowhead(x,tipY,sign*Math.PI/2);
+    }
     if (turns.includes("u_turn")) {
-      const sign = state.city.driving_side === "left" ? 1 : -1;
-      const turnY = sign * laneWidth * .28, tipX = -length * .25, baseX = tipX + length * .16;
-      const uHeadHalf = Math.min(length * .055, laneWidth * .14);
-      ctx.beginPath();
-      ctx.moveTo(branchX, 0);
-      ctx.bezierCurveTo(length * .28, 0, length * .25, turnY, baseX, turnY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(tipX, turnY);
-      ctx.lineTo(baseX, turnY - uHeadHalf);
-      ctx.lineTo(baseX, turnY + uHeadHalf);
-      ctx.closePath();
-      ctx.fill();
+      const sign=state.city.driving_side === "left" ? 1 : -1, y=sign*laneWidth*.30;
+      ctx.beginPath();ctx.moveTo(-length*.12,0);
+      ctx.bezierCurveTo(length*.30,0,length*.30,y,-length*.12,y);ctx.stroke();
+      arrowhead(-length*.12-head,y,Math.PI);
     }
     ctx.restore();
   }
@@ -424,7 +385,7 @@
   }
 
   function updateCity(city) {
-    state.city = city; state.laneDirections = buildLaneDirections(city); $("city-name").textContent = city.name; $("city-description").textContent = city.description;
+    state.city = city; state.laneDirections = buildLaneDirections(city);
     $("intersection-count").textContent = city.intersections.length; $("way-count").textContent = city.ways.length;
     $("lane-count").textContent = city.edges.reduce((sum, edge) => sum + edge.weight, 0);
     state.compute = { tick: null, measuredAt: performance.now(), hz: null };
@@ -460,7 +421,6 @@
     $("signal-name").textContent = `${intersection.id} / ${intersection.name}`; $("signal-countdown").textContent = `${signal.remaining_seconds.toFixed(1)}s`;
     $("signal-phase").textContent = `${signal.phase_name} · ${(signal.stage || "green").replace("_", " ")}`;
     $("signal-next").textContent = `Next: ${signal.next_phase_name || intersection.traffic_control.phases[(signal.phase_index + 1) % intersection.traffic_control.phases.length].name}`;
-    $("signal-basis").textContent = intersection.traffic_control.planning_basis;
     $("signal-controller").textContent = signal.controller || "fixed-time"; $("signal-decision").textContent = signal.decision || "scheduled";
     $("signal-green-target").textContent = `${(signal.base_green_seconds || 0).toFixed(1)} → ${(signal.target_green_seconds || 0).toFixed(1)}s`;
     $("signal-pressure").textContent = `${(signal.queue_pressure || 0).toFixed(1)} / ${(signal.competing_pressure || 0).toFixed(1)}`;
@@ -469,7 +429,59 @@
       const dot = document.createElement("i"), name = document.createElement("span"), duration = document.createElement("strong");
       name.textContent = phase.name; duration.textContent = `${phase.duration_seconds}s · ${phase.min_green_seconds || phase.duration_seconds}–${phase.max_green_seconds || phase.duration_seconds}s`; row.append(dot, name, duration); return row;
     }));
-    $("signal-movements").replaceChildren(...(signal.allowed_movements || []).map((movement) => { const item = document.createElement("span"); item.textContent = `${movement.turn || "flow"} · ${movement.from_way_id} L${(movement.from_lanes || []).map((lane)=>lane+1).join(",")} → ${movement.to_way_id} L${(movement.to_lanes || []).map((lane)=>lane+1).join(",")} · ${(movement.lane_connections || []).length} paths`; return item; }));
+    const phases = intersection.traffic_control.phases;
+    const container = $("signal-movements");
+    const signature = JSON.stringify([intersection.id, phases]);
+    if (container.dataset.signature !== signature) {
+      container.dataset.signature = signature;
+      container.replaceChildren(...phases.map((phase, index) => {
+        const card = document.createElement("div"); card.className = "flow-card";
+        card.dataset.phaseIndex = index;
+        const title = document.createElement("div"); title.textContent = phase.name || `Phase ${index + 1}`;
+        const status = document.createElement("small"); card.append(title,status);
+        const copy = document.createElement("canvas"); copy.width = 680; copy.height = 520;
+        copy.style.width = "100%"; copy.style.height = "auto";
+        copy.setAttribute("aria-label", `${intersection.id}: ${title.textContent}`);
+        drawJunctionCopy(copy, intersection, phase);
+        card.append(copy);return card;
+      }));
+    }
+    [...container.children].forEach(card => {
+      const active=signal.stage === "green" && Number(card.dataset.phaseIndex) === signal.phase_index;
+      card.classList.toggle("flow-active",active);card.querySelector("small").textContent=active ? "Active phase" : "Waiting";
+    });
+  }
+
+  function drawJunctionCopy(copy, intersection, phase) {
+    const saved = { ctx, city: state.city, snapshot: state.snapshot, transform: state.transform, camera: state.camera };
+    try {
+      ctx = copy.getContext("2d");
+      const ways = saved.city.ways.filter(w => w.from === intersection.id || w.to === intersection.id);
+      const radius = saved.city.simulation.intersection_radius || 22;
+      // Fit the junction mouth geometry, rather than long approach roads.
+      const corners = [];
+      ways.forEach(way => {
+        const along = way.to === intersection.id ? Math.max(0, wayLength(way)-radius) : Math.min(radius, wayLength(way));
+        const point = sampleWay(way, along, (way.lanes-1)/2);
+        const half = way.lanes*way.lane_width/2+2;
+        for (const side of [-1,1]) corners.push({ x: point.x-side*point.ty*half, y: point.y+side*point.tx*half });
+      });
+      const minX = Math.min(...corners.map(p => p.x)), maxX = Math.max(...corners.map(p => p.x));
+      const minY = Math.min(...corners.map(p => p.y)), maxY = Math.max(...corners.map(p => p.y));
+      const margin = Math.max(4, radius*.18);
+      const scale = Math.min(copy.width/(maxX-minX+margin*2), copy.height/(maxY-minY+margin*2));
+      state.transform = { baseScale: scale, baseOx: copy.width/2-(minX+maxX)/2*scale, baseOy: copy.height/2-(minY+maxY)/2*scale, width: copy.width, height: copy.height };
+      state.camera = { zoom: 1, panX: 0, panY: 0 };
+      state.city = { ...saved.city, ways, intersections: [intersection] };
+      state.snapshot = { signals: [{ intersection_id: intersection.id, stage: "green", allowed_movements: phase.allowed_movements || [], allowed_incoming_way_ids: [...new Set((phase.allowed_movements || []).map(m => m.from_way_id))] }] };
+      ctx.fillStyle = "#080808"; ctx.fillRect(0,0,copy.width,copy.height);
+      drawWays(); drawIntersectionPads(); drawLaneDirectionMarkings(); drawSignals();
+      ctx.fillStyle = "#e6ecdf"; ctx.font = "16px sans-serif";
+      ctx.fillText(intersection.id, 12, 22);
+    } finally {
+      ctx = saved.ctx; state.city = saved.city; state.snapshot = saved.snapshot;
+      state.transform = saved.transform; state.camera = saved.camera;
+    }
   }
 
   async function control(action, extras = {}) {
@@ -484,7 +496,7 @@
       const payload = await response.json(), select = $("map-preset");
       select.replaceChildren(...payload.presets.map((preset, index) => {
         const option = document.createElement("option");
-        option.value = preset.id; option.textContent = `Preset ${index + 1} · ${preset.name}`; option.title = preset.description;
+        option.value = preset.id; option.textContent = `Preset ${index + 1} · ${preset.name}`; 
         return option;
       }));
       state.presetID = payload.current_preset_id; select.value = state.presetID; select.disabled = payload.presets.length < 2;
