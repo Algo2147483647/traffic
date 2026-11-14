@@ -1,0 +1,12 @@
+{
+  "id": "python.signal",
+  "name": "Python signal experiment",
+  "capability": "signal",
+  "algorithm_version": "1",
+  "contract_version": 1,
+  "command": [
+    "python",
+    "signal.py"
+  ],
+  "wall_timeout_ms": 1500
+}

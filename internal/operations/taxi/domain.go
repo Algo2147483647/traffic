@@ -19,6 +19,7 @@ type Stop struct {
 	Position model.Vec2 `json:"position"`
 }
 type Order struct {
+	JourneyID   int     `json:"journey_id,omitempty"`
 	ID          int     `json:"id"`
 	Pickup      string  `json:"pickup"`
 	Destination string  `json:"destination"`

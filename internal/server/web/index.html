@@ -19,7 +19,7 @@
       <div class="settings-body">
       <div class="settings-map-grid">
         <label class="select-control preset-control">Map<select id="map-preset" aria-label="Map preset" disabled><option>Loading maps…</option></select></label>
-        <label class="select-control">Mode<select id="simulation-mode"><option value="traffic">Traffic</option><option value="taxi">Taxi</option></select></label>
+        <label class="select-control">Demand mix<select id="simulation-mode"><option value="traffic">Traffic</option><option value="taxi">Taxi</option><option value="mixed">Road + Taxi</option></select></label>
         <label class="select-control">Layer<select id="layer-filter" aria-label="Map layer"><option value="all">All layers</option><option value="ground">Ground</option><option value="bridge">Bridges</option><option value="ramp">Ramps</option></select></label>
       </div>
       <div class="simulation-controls" aria-label="Simulation controls">
@@ -30,12 +30,25 @@
         <button id="zoom-out-button" type="button" class="quiet icon-button" aria-label="Zoom out">−</button><span id="view-scale" class="view-scale">100%</span><button id="zoom-in-button" type="button" class="quiet icon-button" aria-label="Zoom in">+</button><button id="fit-button" type="button" class="quiet">Fit map</button><button id="fullscreen-button" type="button" class="quiet">Full screen</button>
         <label class="coordinate-control"><input id="show-coordinates" type="checkbox" checked> Show coordinates and scale</label>
       </div>
+      <label class="range-control"><span>Walking speed <b id="walk-speed-value">1.4 m/s</b></span><input id="walk-speed-control" type="range" min="0.3" max="3" step="0.1" value="1.4"></label>
+      <section id="shared-demand-settings">
+        <h3>Shared travel demand</h3>
+        <label class="select-control">Trips per minute<input id="shared-rate" type="number" min="0" max="60" step="0.5" value="2"></label>
+        <label class="range-control"><span>Taxi share <b id="shared-share-value">50%</b></span><input id="shared-share" type="range" min="0" max="100" step="5" value="50"></label>
+        <button id="shared-apply">Apply demand mix</button><p id="shared-summary" role="status"></p>
+      </section>
+      <details><summary>Route and signal algorithms</summary>
+        <label class="select-control">Route planner<select id="route-algorithm"><option value="native">Native</option></select></label>
+        <label class="select-control">Signal scheduler<select id="signal-algorithm"><option value="native">Native</option></select></label>
+        <label class="select-control">Parameters (JSON)<textarea id="road-algorithm-parameters">{}</textarea></label>
+        <button id="road-algorithm-apply">Apply algorithms</button><p id="road-algorithm-status" role="status"></p>
+      </details>
       <section id="taxi-settings" hidden>
         <div class="settings-section-heading"><h3>Taxi service</h3><span id="taxi-fleet-status"></span></div>
         <div class="taxi-live-fields">
           <label for="taxi-fleet">Drivers</label><input id="taxi-fleet" type="number" min="1" max="200" step="1" value="32" aria-label="Driver count">
           <input id="taxi-fleet-range" type="range" min="1" max="200" step="1" value="32" aria-label="Driver count slider">
-          <label for="taxi-demand">Orders per minute</label><input id="taxi-demand" type="number" min="0" max="60" step="0.5" value="2" aria-label="Order frequency">
+          <label for="taxi-demand">Shared trips per minute</label><input id="taxi-demand" type="number" min="0" max="60" step="0.5" value="2" aria-label="Order frequency">
           <input id="taxi-demand-range" type="range" min="0" max="60" step="0.5" value="2" aria-label="Order frequency slider">
         </div>
         <button id="taxi-load-apply" class="apply-load">Apply live</button><p id="taxi-load-feedback" role="status"></p>
@@ -43,7 +56,7 @@
           <label class="select-control">Algorithm<select id="taxi-algorithm"><option value="nearest">Nearest ETA</option></select></label>
           <div class="taxi-fields"><label>Seed<input id="taxi-seed" type="number" value="71429"></label><label>Dispatch interval (s)<input id="taxi-interval" type="number" min="1" max="30" value="2"></label></div>
           <label class="range-control">Algorithm parameters (JSON)<textarea id="taxi-parameters" rows="3">{"wait_weight":0.25}</textarea></label>
-          <div class="settings-action-row"><button id="taxi-apply">Restart taxi scenario</button><button id="taxi-export" class="quiet">Export run</button></div>
+          <div class="settings-action-row"><button id="taxi-apply">Apply taxi settings</button><button id="taxi-export" class="quiet">Export run</button></div>
         </details>
         <p id="taxi-error" role="status"></p>
       </section>

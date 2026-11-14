@@ -120,7 +120,7 @@ func (s *Simulation) reserveFlowLocked() {
 		}
 		// Keep enough downstream storage for a full stop after entering. This
 		// corridor is also protected against admission and lane changes.
-		limit := math.Min(s.graph.Simulation.DriveSpeed, math.Min(w.SpeedLimit, next.SpeedLimit))
+		limit := math.Min(w.SpeedLimit, next.SpeedLimit)
 		r := &flowReservation{stamp: s.stamp, node: w.To, from: w.ID, to: next.ID, index: p.routeIndex, fromLane: p.lane, lane: lane, along: along, speed: limit}
 		s.reservations[p.id] = r
 	}
@@ -149,4 +149,17 @@ func (s *Simulation) downstreamSpeed(p *personState, r *flowReservation, remaini
 		limit = math.Min(limit, stoppingSpeed(remaining+gap, other.speed, comfortableBraking, dt))
 	}
 	return limit
+}
+
+// Hard distance bound is independent of desired-speed and comfort policies.
+func (s *Simulation) downstreamSafety(p *personState, r *flowReservation, remaining, dt float64) float64 {
+	bound := math.Inf(1)
+	for _, other := range s.people {
+		if other == p || other.wayID != r.to || !occupiesLane(other, r.lane) || (other.state != "driving" && other.state != "waiting") {
+			continue
+		}
+		distance := math.Max(0, remaining+other.along-r.along-s.minimumVehicleSpacing())
+		bound = math.Min(bound, math.Min(distance/dt, stoppingSpeed(distance, other.speed, emergencyBraking, dt)))
+	}
+	return bound
 }

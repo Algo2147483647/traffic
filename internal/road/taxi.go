@@ -9,6 +9,7 @@ import (
 	"time"
 	"traffic/internal/dispatch"
 
+	"traffic/internal/operations/demand"
 	"traffic/internal/operations/taxi"
 )
 
@@ -103,32 +104,61 @@ func normalizeTaxi(c TaxiConfig) (TaxiConfig, error) {
 	return c, nil
 }
 func (s *Simulation) setModeLocked(mode string, c TaxiConfig) error {
-	if mode != "traffic" && mode != "taxi" {
-		return fmt.Errorf("mode must be traffic or taxi")
+	if mode != "traffic" && mode != "taxi" && mode != "mixed" {
+		return fmt.Errorf("mode must be traffic, taxi or mixed")
 	}
+	share := 0.0
 	if mode == "taxi" {
-		var e error
-		c, e = normalizeTaxi(c)
-		if e != nil {
-			return e
+		share = 1
+	}
+	if mode == "mixed" {
+		share = .5
+	}
+	rate := 2.0
+	if mode != "traffic" {
+		var err error
+		c, err = normalizeTaxi(c)
+		if err != nil {
+			return err
 		}
-		if _, e = dispatch.New(c.Algorithm); e != nil {
-			return e
+		policy, err := dispatch.New(c.Algorithm)
+		if err != nil {
+			return err
 		}
 		if len(s.taxiStops()) < 2 {
-			return fmt.Errorf("map needs at least two accessible service stops")
+			return fmt.Errorf("map needs two trip-access roads")
 		}
+		if s.taxi == nil {
+			s.startTaxiLive(c)
+		} else {
+			if err = s.setTaxiLoadLocked(c.Fleet, c.Demand); err != nil {
+				return err
+			}
+			s.taxi.config = c
+			s.taxi.policy = policy
+		}
+		rate = c.Demand
 	}
-	s.clearTaxi()
-	s.spawnRate = s.graph.Simulation.SpawnRate
-	s.maxPeople = s.graph.Simulation.MaxPeople
-	s.resetLocked(s.graph.Simulation.People)
-	s.clock.Paused = false
-	if mode == "taxi" {
-		s.startTaxi(c)
+	if s.demandStream != nil && mode == "traffic" {
+		rate = s.demandStream.Config.Rate
+	}
+	first := s.demandStream == nil
+	seed := int64(0)
+	if first {
+		seed = c.Seed
+	}
+	if err := s.setDemand(demand.Config{Rate: rate, TaxiShare: share, Seed: seed}); err != nil {
+		return err
+	}
+	if first && mode != "traffic" {
+		for i := 0; i < min(c.Fleet, 8); i++ {
+			s.demandStream.Add(len(s.taxiStops()))
+		}
+		s.advanceSharedDemand()
 	}
 	return nil
 }
+
 func (s *Simulation) clearTaxi() {
 	if s.taxi != nil && s.taxi.cancel != nil {
 		s.taxi.cancel()
@@ -137,7 +167,7 @@ func (s *Simulation) clearTaxi() {
 	s.taxiEpoch++
 	s.journal.Record(s.clock.Time, "epoch", int(s.taxiEpoch), "invalidated")
 }
-func (s *Simulation) Close() { s.mu.Lock(); defer s.mu.Unlock(); s.clearTaxi() }
+func (s *Simulation) Close() { s.mu.Lock(); defer s.mu.Unlock(); s.cancelAlgorithms(); s.clearTaxi() }
 func (s *Simulation) taxiStops() []TaxiStop {
 	out := []TaxiStop{}
 	for _, w := range s.graph.SortedWays() {
@@ -194,6 +224,10 @@ func (s *Simulation) startTaxi(c TaxiConfig) {
 	s.nextTaxiArrival()
 }
 func (s *Simulation) nextTaxiArrival() {
+	if s.demandStream != nil {
+		s.taxi.nextArrival = math.Inf(1)
+		return
+	}
 	t := s.taxi
 	t.nextArrival = math.Inf(1)
 	if t.config.Demand > 0 {
@@ -258,12 +292,13 @@ func (s *Simulation) taxiRoute(p *personState, target TaxiStop) (taxiPlan, bool)
 		}
 		d = math.Max(0, d)
 		plan.distance += d * 1000 / s.graph.WorldUnitsPerKM
-		plan.eta += d / math.Min(w.SpeedLimit, s.graph.Simulation.DriveSpeed)
+		plan.eta += d / w.SpeedLimit
 	}
 	return plan, len(plan.route) > 0
 }
 func (s *Simulation) taxiSetPlan(v *TaxiVehicle, plan taxiPlan) {
 	p := v.p
+	delete(s.reservations, p.id)
 	p.route = append([]string(nil), plan.route...)
 	p.routeLanes = append([]int(nil), plan.lanes...)
 	p.routeEntryLanes = append([]int(nil), plan.entryLanes...)
@@ -331,6 +366,7 @@ func (s *Simulation) cancelTaxiOrder(o *TaxiOrder) {
 
 	s.journal.Record(s.clock.Time, "order", o.ID, "Cancelled")
 	t.cancelled++
+	s.finishJourney(o.JourneyID, true)
 	for _, v := range t.vehicles {
 		if v.OrderID == o.ID {
 			v.Release(s.clock.Time)
@@ -354,6 +390,7 @@ func (s *Simulation) taxiMaintenance(dt float64) {
 					s.journal.Record(s.clock.Time, "order", o.ID, "Completed")
 
 					t.completed++
+					s.finishJourney(o.JourneyID, false)
 				}
 				v.Release(s.clock.Time)
 			} else if o != nil {
@@ -373,7 +410,7 @@ func (s *Simulation) taxiMaintenance(dt float64) {
 			s.cancelTaxiOrder(o)
 		}
 	}
-	if s.clock.Time >= t.nextArrival {
+	if s.demandStream == nil && s.clock.Time >= t.nextArrival {
 		s.createTaxiOrder()
 		s.nextTaxiArrival()
 	}
@@ -539,7 +576,7 @@ func (s *Simulation) taxiView() *TaxiView {
 	if t == nil {
 		return nil
 	}
-	view := &TaxiView{Config: t.config, Stops: append([]TaxiStop(nil), t.stops...), Orders: []TaxiOrder{}, Vehicles: []TaxiVehicle{}, Created: t.created, Completed: t.completed, Cancelled: t.cancelled, Picked: t.picked, Failures: t.failures, LastError: t.lastError, Solving: t.pending != nil, SolverMS: t.solverMS, Candidates: t.candidateCount}
+	view := &TaxiView{Config: copyCommand(Command{Taxi: t.config}).Taxi, Stops: append([]TaxiStop(nil), t.stops...), Orders: []TaxiOrder{}, Vehicles: []TaxiVehicle{}, Created: t.created, Completed: t.completed, Cancelled: t.cancelled, Picked: t.picked, Failures: t.failures, LastError: t.lastError, Solving: t.pending != nil, SolverMS: t.solverMS, Candidates: t.candidateCount}
 	if t.picked > 0 {
 		view.MeanWait = t.waitSum / float64(t.picked)
 	}
@@ -581,6 +618,11 @@ func (s *Simulation) setTaxiLoadLocked(fleet int, demand float64) error {
 	s.retireTaxiVehicles()
 	s.addTaxiVehicles(fleet)
 	if rateChanged {
+		if s.demandStream != nil {
+			c := s.demandStream.Config
+			c.Rate = demand
+			s.demandStream.Update(c, s.clock.Time)
+		}
 		s.nextTaxiArrival()
 	}
 	return nil
@@ -635,4 +677,24 @@ func (s *Simulation) addTaxiVehicles(target int) {
 			break
 		}
 	}
+}
+
+func (s *Simulation) setTaxiConfigLocked(c TaxiConfig) error {
+	if s.taxi == nil {
+		return fmt.Errorf("enable taxi demand first")
+	}
+	c, err := normalizeTaxi(c)
+	if err != nil {
+		return err
+	}
+	policy, err := dispatch.New(c.Algorithm)
+	if err != nil {
+		return err
+	}
+	if err = s.setTaxiLoadLocked(c.Fleet, c.Demand); err != nil {
+		return err
+	}
+	s.taxi.config = c
+	s.taxi.policy = policy
+	return nil
 }

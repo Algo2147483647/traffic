@@ -450,3 +450,5 @@ coordinate rulers and scale using **Show coordinates and scale**.
 Physical units and time stepping are documented in [physical-units.md](docs/physical-units.md).
 
 Current defaults and the next backend stages: [backend evolution plan](docs/backend-evolution-plan.md).
+
+External route/signal workers and live road/taxi demand: [runtime guide](docs/algorithms-and-demand.md).

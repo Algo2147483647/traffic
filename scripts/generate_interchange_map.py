@@ -38,5 +38,7 @@ compile_flow_connections(city)
 city['description']='Four-cell network with a central C/D cloverleaf and four peripheral trumpet interchanges.'
 city['world_units_per_km']=profile['world_units_per_km']
 out=ROOT/'configs/presets/four-cell-interchanges.json'
+for road in city['ways']:
+    road['speed_limit'] = min(road['speed_limit'], 60/3.6)
 out.write_text(json.dumps(city,indent=2)+'\n',encoding='utf-8')
 print(f'{out}: {len(nodes)} nodes, {len(city["ways"])} directed ways')

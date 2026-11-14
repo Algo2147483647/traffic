@@ -2,6 +2,7 @@ package sim
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"sync"
@@ -14,6 +15,7 @@ import (
 )
 
 type Person struct {
+	JourneyID       int                  `json:"journey_id,omitempty"`
 	Entity          foundation.EntityRef `json:"entity"`
 	Structure       string               `json:"structure"`
 	Elevation       float64              `json:"elevation"`
@@ -63,6 +65,12 @@ type Stats struct {
 }
 
 type Snapshot struct {
+	Demand *demand.Summary `json:"demand,omitempty"`
+
+	Algorithms AlgorithmView `json:"algorithms"`
+
+	WalkSpeed float64 `json:"walk_speed_mps"`
+
 	Kernel      foundation.Stamp   `json:"kernel"`
 	Mode        string             `json:"mode"`
 	Taxi        *TaxiView          `json:"taxi,omitempty"`
@@ -158,6 +166,8 @@ type CityView struct {
 }
 
 type personState struct {
+	journeyID int
+
 	id                 int
 	state              string
 	position           model.Vec2
@@ -203,6 +213,13 @@ type personState struct {
 }
 
 type Simulation struct {
+	mode         string
+	demandStream *demand.Stream
+
+	algorithm algorithmRuntime
+
+	walkSpeed float64
+
 	stamp         foundation.Stamp
 	commands      foundation.Queue[Command]
 	arrivalsQueue foundation.Queue[Arrival]
@@ -245,7 +262,7 @@ func NewFixedTime(graph *model.Graph) *Simulation {
 }
 
 func newSimulation(graph *model.Graph, adaptive bool) *Simulation {
-	s := &Simulation{graph: graph, router: interchange.NewPlanner(graph), clock: foundation.Clock{Rate: 1},
+	s := &Simulation{walkSpeed: graph.Simulation.WalkSpeed, graph: graph, router: interchange.NewPlanner(graph), clock: foundation.Clock{Rate: 1},
 		spawnRate: graph.Simulation.SpawnRate, maxPeople: graph.Simulation.MaxPeople, safeGap: graph.Simulation.SafeGap, adaptive: adaptive}
 	s.resetLocked(graph.Simulation.People)
 	return s
@@ -273,6 +290,7 @@ func (s *Simulation) replaceGraphLocked(graph *model.Graph) {
 	}
 	s.stamp.Topology++
 	s.graph = graph
+	s.walkSpeed = graph.Simulation.WalkSpeed
 	s.router = interchange.NewPlanner(graph)
 	s.clock.Paused = false
 	s.clock.Rate = 1
@@ -340,9 +358,20 @@ func (s *Simulation) advanceLocked(dt float64) {
 		s.stepRemainder = math.Max(0, s.stepRemainder-.05)
 	}
 }
+
+// Tick pipeline: commands -> due decisions -> demand/admission -> controls and
+// reservations -> road/connector motion -> ordered arrivals -> accounting.
+// Snapshot readers acquire the same lock and only see a completed boundary.
 func (s *Simulation) advanceSubstep(dt float64) {
+	wasPaused, run := s.clock.Paused, s.stamp.Run
 	s.drainCommandsLocked()
+	if run != s.stamp.Run || (!wasPaused && s.clock.Paused) {
+		return
+	}
 	s.bindJournal()
+	if !s.advanceAlgorithmsLocked() {
+		return
+	}
 	if !s.taxiDispatch() {
 		return
 	}
@@ -360,11 +389,12 @@ func (s *Simulation) advanceSubstep(dt float64) {
 	if queuedAtSignals > s.maxSignalQueue {
 		s.maxSignalQueue = queuedAtSignals
 	}
+	s.advanceSharedDemand()
 	s.spawnLocked(dt)
 	for _, person := range s.people {
 		if person.state == "walking_to_lane" || person.state == "walking_to_destination" {
 			s.advanceWalking(person, dt)
-		} else if person.state == "arrived" && s.clock.Time-person.arrivedAt >= s.graph.Simulation.ArrivalDwell {
+		} else if s.demandStream == nil && person.state == "arrived" && s.clock.Time-person.arrivedAt >= s.graph.Simulation.ArrivalDwell {
 			s.startTripLocked(person)
 		}
 	}
@@ -396,6 +426,7 @@ func (s *Simulation) advanceSubstep(dt float64) {
 	}
 	s.commitArrivalsLocked()
 	s.taxiMaintenance(dt)
+	s.removeFinishedPrivateCars()
 	s.clock.Tick++
 	s.stamp.World++
 	s.bindJournal()
@@ -405,7 +436,7 @@ func (s *Simulation) advanceWalking(person *personState, dt float64) {
 	delta := person.walkTarget.Sub(person.position)
 	distance := delta.Length()
 	person.heading = delta.Normalize()
-	person.speed = s.graph.Simulation.WalkSpeed
+	person.speed = s.walkSpeed
 	step := person.speed * dt
 	if distance <= step || distance < 0.001 {
 		person.position = person.walkTarget
@@ -504,7 +535,7 @@ func (s *Simulation) transition(person *personState) {
 	person.turnProgress = 0
 	person.turnLength = cubicLength(start, person.turnControl1, person.turnControl2, end)
 	person.nextWayID, person.nextLane, person.nextAlong = next.ID, nextLane, nextAlong
-	person.state, person.speed = "turning", math.Min(person.speed, math.Min(s.graph.Simulation.DriveSpeed, math.Min(current.SpeedLimit, next.SpeedLimit)))
+	person.state, person.speed = "turning", math.Min(person.speed, math.Min(current.SpeedLimit, next.SpeedLimit))
 	person.position = start
 	person.heading = person.turnControl1.Sub(start).Normalize()
 	person.waitingFor, person.waitingSignal, person.waitingReason, person.signalWait = 0, "", "", 0
@@ -518,11 +549,13 @@ func (s *Simulation) transition(person *personState) {
 }
 
 func (s *Simulation) advanceTurning(person *personState, dt float64) {
-	limit := math.Min(s.graph.Simulation.DriveSpeed, math.Min(s.graph.Ways[person.wayID].SpeedLimit, s.graph.Ways[person.nextWayID].SpeedLimit))
+	limit := math.Min(s.graph.Ways[person.wayID].SpeedLimit, s.graph.Ways[person.nextWayID].SpeedLimit)
+	safety := math.Inf(1)
 	if r := s.flowReservation(person); r != nil {
+		safety = s.downstreamSafety(person, r, person.turnLength*(1-person.turnProgress), dt)
 		limit = math.Min(limit, s.downstreamSpeed(person, r, person.turnLength*(1-person.turnProgress), dt))
 	}
-	person.speed = advanceSpeed(person.speed, limit, math.Inf(1), dt)
+	person.speed = advanceSpeed(person.speed, limit, safety, dt)
 	s.moveConnector(person, person.speed*dt)
 }
 func (s *Simulation) moveConnector(person *personState, distance float64) {
@@ -626,6 +659,7 @@ func (s *Simulation) stopLine(way *model.Way) float64 {
 }
 
 func (s *Simulation) exitLane(person *personState) {
+	s.finishJourney(person.journeyID, false)
 	if s.taxiArrive(person) {
 		return
 	}
@@ -635,7 +669,7 @@ func (s *Simulation) exitLane(person *personState) {
 	person.walkTarget = person.destination
 	person.wayID = ""
 	person.state = "walking_to_destination"
-	person.speed = s.graph.Simulation.WalkSpeed
+	person.speed = s.walkSpeed
 	person.laneChanging = false
 	person.waitingFor, person.waitingSignal, person.waitingReason, person.signalWait = 0, "", "", 0
 	person.heading = person.destination.Sub(person.position).Normalize()
@@ -649,12 +683,18 @@ func (s *Simulation) resetLockedCommand(population int) {
 }
 
 func (s *Simulation) resetLocked(population int) {
+	if s.demandStream != nil {
+		s.demandStream = demand.New(s.demandStream.Config, 0)
+	}
+	s.cancelAlgorithms()
 	s.stamp.Run++
 	s.stamp.World++
 	if s.stamp.Topology == 0 {
 		s.stamp.Topology = 1
 	}
-	s.commands.Clear()
+	for _, e := range s.commands.Discard() {
+		s.journal.Record(s.clock.Time, "command", int(e.Entity), fmt.Sprintf("%d:%s:invalidated by reset", e.Sequence, e.Payload.Kind))
+	}
 	s.arrivalsQueue.Clear()
 	s.reservations = make(map[int]*flowReservation)
 	s.bindJournal()
@@ -680,7 +720,11 @@ func (s *Simulation) resetLocked(population int) {
 	// callers should not need to advance time before the first snapshot.
 	s.updateSignalsLocked(0)
 	if taxiConfig != nil && len(s.taxiStops()) >= 2 {
-		s.startTaxi(*taxiConfig)
+		if s.demandStream != nil {
+			s.startTaxiLive(*taxiConfig)
+		} else {
+			s.startTaxi(*taxiConfig)
+		}
 	}
 }
 
@@ -817,7 +861,7 @@ func (s *Simulation) startTripWithLoadsLocked(person *personState, loads map[str
 		}
 		person.lanePosition = float64(person.lane)
 		person.laneChanging, person.laneChangeProgress, person.laneChangeReason = false, 0, ""
-		person.speed = s.graph.Simulation.WalkSpeed
+		person.speed = s.walkSpeed
 		person.heading = start.Position.Sub(origin).Normalize()
 		person.waitingFor, person.waitingSignal, person.waitingReason, person.signalWait = 0, "", "", 0
 		return
@@ -855,7 +899,7 @@ func (s *Simulation) setTimeScaleLocked(scale float64) {
 func (s *Simulation) Snapshot() Snapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	snapshot := Snapshot{Kernel: s.stamp, City: s.graph.Name, Time: s.clock.Time, Tick: s.clock.Tick, Paused: s.clock.Paused, TimeScale: s.clock.Rate,
+	snapshot := Snapshot{Algorithms: s.algorithmView(), WalkSpeed: s.walkSpeed, Kernel: s.stamp, City: s.graph.Name, Time: s.clock.Time, Tick: s.clock.Tick, Paused: s.clock.Paused, TimeScale: s.clock.Rate,
 		Load:    LoadState{Population: len(s.people), SpawnRate: s.spawnRate, MaxPopulation: s.maxPeople},
 		Spacing: SpacingState{SafeGap: s.safeGap, VehicleSize: s.graph.Simulation.VehicleSize},
 		People:  make([]Person, len(s.people)), Signals: s.signalStates()}
@@ -865,7 +909,7 @@ func (s *Simulation) Snapshot() Snapshot {
 			pose := model.Transform(state.position, state.heading)
 			reference := s.referenceFor(state.position, state.wayID)
 			person := Person{
-				Entity: foundation.EntityRef{Run: s.stamp.Run, ID: foundation.EntityID(state.id)}, ID: state.id, State: state.state, Position: state.position, Speed: state.speed,
+				JourneyID: state.journeyID, Entity: foundation.EntityRef{Run: s.stamp.Run, ID: foundation.EntityID(state.id)}, ID: state.id, State: state.state, Position: state.position, Speed: state.speed,
 				Heading: math.Atan2(state.heading.Y, state.heading.X) * 180 / math.Pi,
 				WayID:   state.wayID, Lane: state.lane, LanePosition: state.lanePosition, Along: state.along, Transform: pose,
 				Reference: Reference{IntersectionID: reference.ID, IntersectionTransform: reference.Transform,
@@ -934,9 +978,15 @@ func (s *Simulation) Snapshot() Snapshot {
 		CurrentSignalQueue: currentQueue, MaximumSignalQueue: s.maxSignalQueue,
 	}
 
-	snapshot.Mode = "traffic"
+	snapshot.Mode = s.mode
+	if snapshot.Mode == "" {
+		snapshot.Mode = "traffic"
+	}
+	if s.demandStream != nil {
+		d := s.demandStream.Summary()
+		snapshot.Demand = &d
+	}
 	if s.taxi != nil {
-		snapshot.Mode = "taxi"
 		snapshot.Taxi = s.taxiView()
 	}
 	return snapshot

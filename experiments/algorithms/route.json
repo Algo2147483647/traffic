@@ -1,0 +1,12 @@
+{
+  "id": "python.route",
+  "name": "Python route experiment",
+  "capability": "route",
+  "algorithm_version": "1",
+  "contract_version": 1,
+  "command": [
+    "python",
+    "route.py"
+  ],
+  "wall_timeout_ms": 1500
+}

@@ -437,7 +437,7 @@
       if (person.state.startsWith("walking") || person.state === "arrived") {
         ctx.fillStyle = person.state === "arrived" ? "#ffffff" : "#efc85b"; ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=4*scale;ctx.beginPath();ctx.arc(0,0,4*scale,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle="rgba(7,16,14,.9)";ctx.lineWidth=.8*scale;ctx.stroke();
       } else {
-        const way=ways[person.way_id],length=(state.city.simulation.vehicle_size||6)*scale,width=1.8*scale;const taxi=state.snapshot.taxi?.vehicles.find(v=>v.id===person.id);ctx.fillStyle=taxi?({Idle:"#a8b0b5",ToPickup:"#efc85b",Boarding:"#efc85b",WithPassenger:"#69d6ef",Alighting:"#69d6ef"}[taxi.state]||"#eee"):(person.state==="waiting"?"#ff785f":"#c8f26b");ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=4*scale;ctx.fillRect(-length/2,-width/2,length,width);ctx.shadowBlur=0;ctx.strokeStyle="rgba(6,14,12,.92)";ctx.lineWidth=.7*scale;ctx.strokeRect(-length/2,-width/2,length,width);
+        const way=ways[person.way_id],length=(state.city.simulation.vehicle_size||6)*scale,width=1.8*scale;const taxi=state.snapshot.taxi?.vehicles.find(v=>v.id===person.id);ctx.fillStyle=taxi?({Idle:"#a8b0b5",ToPickup:"#efc85b",Boarding:"#efc85b",WithPassenger:"#69d6ef",Alighting:"#69d6ef"}[taxi.state]||"#eee"):(person.state==="waiting"?"#ff785f":"#c8f26b");ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=4*scale;ctx.fillRect(-length/2,-width/2,length,width);ctx.shadowBlur=0;
       }
       if (selected) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.2 * scale; ctx.beginPath(); ctx.arc(0, 0, 8 * scale, 0, Math.PI * 2); ctx.stroke(); }
       ctx.restore();
@@ -447,7 +447,8 @@
   function updateSnapshot(snapshot) {
     if(state.snapshot?.mode!==snapshot.mode)state.selected=null;
     state.snapshot = snapshot;
-    const taxi=snapshot.taxi;$("simulation-mode").value=snapshot.mode||"traffic";$("taxi-settings").hidden=!taxi;$("traffic-settings").hidden=Boolean(taxi);$("taxi-stats").hidden=!taxi;$("population-label").textContent=taxi?"taxis":"population";
+    $("walk-speed-control").value=snapshot.walk_speed_mps;$("walk-speed-value").textContent=`${snapshot.walk_speed_mps.toFixed(1)} m/s`;
+    const taxi=snapshot.taxi;$("simulation-mode").value=snapshot.mode||"traffic";$("taxi-settings").hidden=!taxi;$("traffic-settings").hidden=Boolean(snapshot.demand);$("taxi-stats").hidden=!taxi;$("population-label").textContent="population";
     if(taxi&&state.taxiConfigKey!==JSON.stringify(taxi.config)){state.taxiConfigKey=JSON.stringify(taxi.config);$("taxi-load-feedback").textContent="";$("taxi-fleet").value=taxi.config.fleet;$("taxi-fleet-range").value=taxi.config.fleet;$("taxi-demand").value=taxi.config.orders_per_minute;$("taxi-demand-range").value=taxi.config.orders_per_minute;$("taxi-seed").value=taxi.config.seed;$("taxi-interval").value=taxi.config.dispatch_interval_s;$("taxi-algorithm").value=taxi.config.algorithm;$("taxi-parameters").value=JSON.stringify(taxi.config.parameters||{});}
     if(taxi){
       $("taxi-created").textContent=taxi.created;$("taxi-picked").textContent=taxi.picked;$("taxi-completed").textContent=taxi.completed;$("taxi-cancelled").textContent=taxi.cancelled;$("taxi-wait").textContent=`${taxi.mean_wait_s.toFixed(1)} s`;$("taxi-solver").textContent=taxi.solving?"Computing…":`${taxi.solver_ms.toFixed(1)} ms`;
@@ -456,6 +457,8 @@
       $("taxi-error").textContent=taxi.last_error||"";
     }
 
+    if(snapshot.demand){const d=snapshot.demand;const key=JSON.stringify(d.config);if(state.demandKey!==key){state.demandKey=key;$("shared-rate").value=d.config.trips_per_minute;$("shared-share").value=d.config.taxi_share*100;$("shared-share-value").textContent=`${Math.round(d.config.taxi_share*100)}%`;}$("shared-summary").textContent=`${d.generated} generated · ${d.car_trips} car / ${d.taxi_trips} taxi · ${d.queued} queued · ${d.active} active · ${d.completed} completed · ${d.cancelled} cancelled`;}
+    if(snapshot.algorithms){const a=snapshot.algorithms;$("road-algorithm-status").textContent=a.last_error?`Native fallback: ${a.last_error}`:`${a.pending?"Computing · ":""}${a.applied} applied · ${a.fallbacks} fallbacks`;}
     updateComputeRate(snapshot);
     const minutes = Math.floor(snapshot.time / 60).toString().padStart(2, "0"), seconds = (snapshot.time % 60).toFixed(1).padStart(4, "0");
     $("sim-time").textContent = `${minutes}:${seconds}`; $("people-count").textContent = snapshot.people.length;
@@ -734,6 +737,7 @@
   $("fullscreen-button").addEventListener("click", async () => { if (document.fullscreenElement) await document.exitFullscreen(); else await dashboard.requestFullscreen(); });
   const loadControls = [["population-control","population-value",(value) => value],["spawn-rate-control","spawn-rate-value",(value) => `${Number(value).toFixed(0)}/min`],["max-population-control","max-population-value",(value) => value]];
   loadControls.forEach(([controlID, valueID, format]) => $(controlID).addEventListener("input", (event) => { $(valueID).textContent = format(event.target.value); }));
+  $("walk-speed-control").addEventListener("input",e=>control("set_walk_speed",{walk_speed_mps:Number(e.target.value)}));
   $("safe-gap-control").addEventListener("input",(event)=>{const safeGap=Number(event.target.value);$("safe-gap-value").textContent=`${safeGap} m`;control("set_spacing",{safe_gap:safeGap});});
   $("apply-load-button").addEventListener("click", () => {
     const population = Number($("population-control").value), spawnRate = Number($("spawn-rate-control").value)/60, maxPopulation = Math.max(population, Number($("max-population-control").value));
@@ -743,7 +747,7 @@
   document.addEventListener("fullscreenchange", () => { $("fullscreen-button").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen"; setTimeout(fitCanvas, 0); }); window.addEventListener("resize", fitCanvas);
 
   function taxiConfiguration(){return {fleet:Number($("taxi-fleet").value),orders_per_minute:Number($("taxi-demand").value),algorithm:$("taxi-algorithm").value,seed:Number($("taxi-seed").value),dispatch_interval_s:Number($("taxi-interval").value),max_wait_s:600,dwell_s:20,parameters:JSON.parse($("taxi-parameters").value||"{}")};}
-  async function applyMode(){try{const mode=$("simulation-mode").value;await control("set_mode",{mode,taxi:mode==="taxi"?taxiConfiguration():{}});}catch(error){$("taxi-error").textContent=error.message;}}
+  async function applyMode(){try{const mode=$("simulation-mode").value;await control("set_mode",{mode,taxi:mode!=="traffic"?taxiConfiguration():{}});}catch(error){$("taxi-error").textContent=error.message;}}
   for(const id of ["taxi-fleet","taxi-demand"]){
     $(id+"-range").addEventListener("input",()=>{$(id).value=$(id+"-range").value;$("taxi-load-feedback").textContent="Ready to apply";});
     $(id).addEventListener("input",()=>{$(id+"-range").value=$(id).value;$("taxi-load-feedback").textContent="Ready to apply";});
@@ -755,8 +759,12 @@
       $("taxi-load-feedback").textContent=snapshot?"Applied · active trips continue":"Could not apply changes";
     }finally{button.disabled=false;}
   });
-  $("simulation-mode").addEventListener("change",applyMode);$("taxi-apply").addEventListener("click",applyMode);
+  $("simulation-mode").addEventListener("change",applyMode);$("taxi-apply").addEventListener("click",async()=>{try{await control("set_taxi_config",{taxi:taxiConfiguration()});}catch(e){$("taxi-error").textContent=e.message;}});
   $("taxi-export").addEventListener("click",()=>{const data={schema_version:1,city:state.city,snapshot:state.snapshot},url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));const a=document.createElement("a");a.href=url;a.download="taxi-run.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+  $("shared-share").addEventListener("input",e=>{$("shared-share-value").textContent=e.target.value+"%";});
+  $("shared-apply").addEventListener("click",async()=>{await control("set_demand",{demand:{trips_per_minute:Number($("shared-rate").value),taxi_share:Number($("shared-share").value)/100}});});
+  $("road-algorithm-apply").addEventListener("click",async()=>{try{const parameters=JSON.parse($("road-algorithm-parameters").value);await control("set_algorithms",{algorithms:{route:{id:$("route-algorithm").value,parameters},signal:{id:$("signal-algorithm").value,parameters}}});}catch(e){$("road-algorithm-status").textContent=e.message;}});
+  fetch("/api/algorithms/workers").then(r=>r.json()).then(items=>{for(const m of items){const o=document.createElement("option");o.value=m.id;o.textContent=m.name||m.id;$(m.capability+"-algorithm").append(o);}}).catch(e=>{$("road-algorithm-status").textContent=e.message;});
   fetch("/api/dispatch/algorithms").then(r=>r.json()).then(items=>{$("taxi-algorithm").replaceChildren(...items.map(item=>{const o=document.createElement("option");o.value=item.id;o.textContent=item.name;return o;}));$("taxi-algorithm").value="nearest";}).catch(error=>{$("taxi-error").textContent=error.message;});
   loadPresets();
   const events = new EventSource("/api/stream"); events.addEventListener("open", () => setConnection("live", "Live model connected")); events.addEventListener("city", (event) => updateCity(JSON.parse(event.data))); events.addEventListener("snapshot", (event) => updateSnapshot(JSON.parse(event.data))); events.addEventListener("error", () => setConnection("error", "Reconnecting to model"));

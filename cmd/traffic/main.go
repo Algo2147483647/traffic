@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"time"
 
+	"traffic/internal/algorithms"
 	"traffic/internal/dispatch"
 	model "traffic/internal/infrastructure/road"
 	sim "traffic/internal/road"
@@ -35,7 +36,11 @@ func run() error {
 	policyDir := flag.String("dispatch-dir", "experiments/dispatch", "Local experimental policy manifest directory")
 	roadPolicy := flag.String("road-policy", "baseline", "Registered road policy profile")
 	roadParameters := flag.String("road-parameters", "{}", "Numeric policy parameters as JSON")
+	algorithmDir := flag.String("algorithm-dir", "experiments/algorithms", "Route and signal worker manifests")
 	flag.Parse()
+	if err := algorithms.LoadDirectory(*algorithmDir); err != nil {
+		return err
+	}
 	var policyParameters map[string]float64
 	if err := json.Unmarshal([]byte(*roadParameters), &policyParameters); err != nil {
 		return err

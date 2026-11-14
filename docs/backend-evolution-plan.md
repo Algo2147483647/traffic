@@ -88,19 +88,48 @@ The requested road-dynamics and operations slice is implemented in the runtime:
   the road adapter admits generated agents. Existing saturation/reset behavior
   remains. This does not enable simultaneous car/taxi/metro demand.
 
-The broader Stage 1 kernel migration remains open: globally typed entity/run IDs,
-world/topology revision envelopes, a common queued-command/arrival-event protocol,
-and a fully explicit cross-module tick pipeline. Current calls remain synchronous
-under the single simulation mutex, with the existing taxi epoch for asynchronous
-worker invalidation. No unused event API is counted as delivery. Complete these
-kernel contracts before extending worker integration in Stage 2.
+The Stage 1 kernel follow-up is now connected to production execution:
 
-Road-end admission remains conservative: vehicles brake before requesting a
-connector, including unsignalized interchange links. There is no advance
-reservation spanning several links, which can underestimate free-flow speed.
-A follow-up must reserve downstream space before permitting continuous-speed
-passage, rather than simply removing the stopping constraint. Connector conflicts
-retain the existing reservation model, not a general 2D collision solver.
+- `foundation.RunID`, `EntityID`, `Revision`, `Stamp` and `EntityRef` identify a
+  run, an entity within that run, and world/topology revisions. Existing integer
+  IDs remain as compatibility fields; snapshots additionally publish `kernel`
+  and each physical person's run-qualified `entity` reference.
+- `foundation.Queue[T]` orders envelopes by due tick, priority, entity ID and
+  submission sequence. Road's `Command` and `Arrival` use this same queue.
+- All existing public controls execute through the command boundary, including
+  pause, playback, load, spacing, mode, reset and validated graph replacement.
+  Scheduled commands are accepted by `POST /api/commands`; queued application and
+  rejection are visible through the existing bounded `/api/events` journal.
+- Commands validate run/topology both at submission and commit. Optional strict
+  world validation rejects any intervening commit. Reset invalidates pending
+  commands, arrivals and reservations. Map replacement also increments topology.
+- The 50 ms pipeline is commands, due decisions, demand/admission, controls and
+  reservations, motion, ordered arrivals, then operational accounting. Road
+  destination events validate run, vehicle, road, route index and taxi task before
+  applying arrivals. Readers only obtain snapshots across a completed lock boundary.
+- Existing dispatch worker epoch validation remains in its compatibility adapter;
+  the general worker protocol migration belongs to Stage 2.
+
+Unsignalized flow links now use rolling advance reservations. The front vehicle
+requests the connector and receiving-lane corridor before its comfortable braking
+point. Competing merges, new admissions and lane changes cannot take that entry.
+The owner keeps its grant while traversing the connector; route changes, reset and
+completed entry release it. Desired and hard safety speeds anticipate downstream
+leaders, road storage and speed limits. Residual motion at the incoming boundary
+continues into the connector instead of resetting speed. Connector completion is
+not integrated a second time as road motion in the same tick.
+
+All 36 isolated interchange routes are tested at the minimum posted speed along
+that route (without an artificial 10 m/s cap), with no speed dip at intermediate
+flow connectors. Another fixture checks competing merges, a stopped downstream
+queue, minimum gaps, and release after the queue clears. The reservation policy
+is deliberately conservative under contention: it serializes a merge node and
+reserves its receiving corridor, rather than optimizing overlapping time slots.
+It is rolling one-connector lookahead, not an all-route reservation or a general
+2D collision solver. Short downstream storage, actual queue/conflict or a lower
+speed limit may still require braking.
+
+Kernel contract and executable examples: [command and event kernel](kernel-and-flow.md).
 
 Verification covers acceleration/braking and emergency queues, fixed-step playback
 at 1x/2x/10x, spacing and safe lane changes, road admission, all 36 interchange
@@ -133,6 +162,29 @@ Acceptance: replacing worker code changes actual selected roads/phase schedules;
 timeout, crash, malformed JSON and stale epoch cause bounded, recorded rejection;
 UI remains responsive; existing external taxi matching still works.
 
+### Stage 2 delivered checkpoint
+
+`internal/algorithms` now executes both route and signal workers through one
+versioned request/response host. Manifests declare capability, algorithm version,
+command, working directory and wall timeout. Requests carry run/world/topology,
+input tick, request ID, seed and parameters. Work runs outside the simulation lock;
+physical time waits for bounded decisions while controls and snapshots remain live.
+Results must echo the full envelope. Native operation resumes on timeout, process
+failure, malformed/incomplete output, stale results or semantic validation failure.
+
+The route hook is a live replanning batch (up to eight eligible physical agents per
+five simulated seconds). Native hierarchical planning supplies baseline and legal
+alternative candidates; the worker can return its own fully expanded lane path.
+The host validates endpoints, lane indices, every connector and lane-change space,
+then replaces the actual remaining physical route. Signal workers propose a phase
+and bounded green duration. Native clearance/minimum-green/maximum-red safeguards
+remain in charge of phase transitions. Flow nodes do not receive signal clearance.
+
+Taxi matching retains its existing external-protocol adapter for compatibility;
+the new generic host does not silently change old dispatch manifests. Working Python
+route/signal examples are installed under `experiments/algorithms` and selectable in
+Settings. Full contract: [external algorithms and shared demand](algorithms-and-demand.md).
+
 ### Stage 3: common demand and simultaneous car/taxi operation
 
 Create Traveler, Journey, DemandEvent and admission-queue records. Separate ordinary
@@ -148,6 +200,27 @@ Acceptance: a fixed seeded 50/50 demand fixture produces reproducible assignment
 both road populations move together, each traveler has exactly one active journey,
 and generated = queued + active + completed + cancelled at every accounting boundary.
 Metro share is rejected until the metro executor reports available.
+
+### Stage 3 delivered checkpoint
+
+A seeded shared origin/destination stream now assigns each new journey to road or
+taxi exactly once. Private cars are admitted into the same physical vehicle list as
+taxis; they share lane entry, following, lane changes, reservations and signals.
+Queued private trips retry when storage/capacity is available. Taxi journeys create
+orders in the existing exclusive-task lifecycle. The demand summary maintains
+`generated = queued + active + completed + cancelled` and separate mode totals.
+
+Demand rate, ratio, taxi fleet and dispatch settings update live. Road/Taxi/Mixed
+selection changes future demand shares without resetting time, run ID, vehicle
+positions or accepted orders. Existing legacy ordinary trips finish naturally when
+the shared stream is enabled; they are not retroactively counted as new journeys.
+Only an explicit Reset or map replacement starts a new run. Mixed metro demand is
+still unavailable; the next stage is the real metro executor.
+
+Walking speed is configurable from 0.3 to 3 m/s (default 1.4). Driving limits are
+read from each road, not the old simulation-wide speed field. Presets now use at
+most 60 km/h, retaining lower ramp/local-road limits. The map generator preserves
+this calibration. Vehicle bodies are drawn without the former dark outline.
 
 ### Stage 4: standalone metro, delivered in three running increments
 

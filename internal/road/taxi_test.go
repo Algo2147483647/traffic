@@ -62,10 +62,11 @@ func TestTaxiServiceAndModeSwitch(t *testing.T) {
 	if s.Snapshot().Mode != "taxi" || s.taxi.completed != 0 {
 		t.Fatal("reset did not retain taxi configuration")
 	}
+	beforeTime, beforeCount, beforeRun := s.clock.Time, len(s.people), s.stamp.Run
 	if e := s.SetMode("traffic", TaxiConfig{}); e != nil {
 		t.Fatal(e)
 	}
-	if s.taxi != nil || s.Snapshot().Mode != "traffic" || len(s.people) != s.graph.Simulation.People {
+	if s.taxi == nil || s.Snapshot().Mode != "traffic" || len(s.people) != beforeCount || s.clock.Time != beforeTime || s.stamp.Run != beforeRun {
 		t.Fatal("traffic restoration failed")
 	}
 }
@@ -118,6 +119,7 @@ func TestTaxiInterchangeMovements(t *testing.T) {
 				s.taxi.nextDispatch = 1e9
 				v := s.taxi.vehicles[0]
 				p := v.p
+				s.people = []*personState{p}
 				first, last := g.Ways[r.WayIDs[0]], g.Ways[r.WayIDs[len(r.WayIDs)-1]]
 				p.wayID = first.ID
 				p.along = 25
@@ -182,9 +184,10 @@ func TestTaxiPendingPolicyDoesNotLockUIOrSurviveReset(t *testing.T) {
 	if time.Since(start) > 50*time.Millisecond {
 		t.Fatal("UI blocked by algorithm")
 	}
-	_ = s.SetMode("traffic", TaxiConfig{})
+	oldRuntime := s.taxi
+	s.Reset(1)
 	time.Sleep(120 * time.Millisecond)
-	if s.taxi != nil {
-		t.Fatal("stale result restored taxi")
+	if s.taxi == oldRuntime || s.taxi.pending != nil {
+		t.Fatal("stale result survived reset")
 	}
 }

@@ -19,6 +19,7 @@ func TestHierarchicalTaxiPickupAndDelivery(t *testing.T) {
 	}
 	v := s.taxi.vehicles[0]
 	p := v.p
+	s.people = []*personState{p}
 	w := s.graph.Ways["W_S_out__C_D0_in"]
 	p.wayID = w.ID
 	p.along = 25

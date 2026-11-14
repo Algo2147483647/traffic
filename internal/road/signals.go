@@ -14,6 +14,10 @@ const (
 // signalRuntime is deliberately independent for each intersection: every
 // controller may extend or terminate a green without disturbing the others.
 type signalRuntime struct {
+	externalPhase int
+	externalGreen float64
+	externalUntil uint64
+
 	PhaseIndex        int
 	LastServedPhase   int
 	SelectedPhase     int
@@ -164,6 +168,9 @@ func (s *Simulation) refreshSignalSelection(control model.TrafficControl, runtim
 		served = runtime.LastServedPhase
 	}
 	runtime.SelectedPhase = selectNextPhase(runtime.PhasePressures, served, runtime.PhaseRedElapsed, control.MaxRedSeconds)
+	if runtime.externalUntil > s.clock.Tick && runtime.externalPhase != served && !phaseExceededMaximumRed(runtime, runtime.SelectedPhase, control.MaxRedSeconds) {
+		runtime.SelectedPhase = runtime.externalPhase
+	}
 }
 
 func selectNextPhase(evaluations []PhasePressure, justServed int, redElapsed []float64, maxRed float64) int {
@@ -197,6 +204,11 @@ func (s *Simulation) setAdaptiveGreenTarget(control model.TrafficControl, runtim
 	maximum := phase.MaxGreenSeconds
 	if maximum < minimum {
 		maximum = phase.DurationSeconds
+	}
+	if runtime.externalUntil > s.clock.Tick && runtime.externalPhase == runtime.PhaseIndex {
+		runtime.GreenTarget = math.Max(minimum, math.Min(maximum, runtime.externalGreen))
+		runtime.Decision = "external schedule"
+		return
 	}
 	base := phase.DurationSeconds
 	elapsed := runtime.StageElapsed

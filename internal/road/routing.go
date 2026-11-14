@@ -66,7 +66,7 @@ func (s *Simulation) congestionRouteWithLoads(start, finish, blocked string, lan
 			begin = along
 		}
 		duration := math.Max(laneChangeBaseDuration, math.Min(2.2, w.LaneWidth/5))
-		needed := float64(absInt(entry-exit)) * (math.Min(w.SpeedLimit, s.graph.Simulation.DriveSpeed)*duration + s.safeGap + s.graph.Simulation.VehicleSize)
+		needed := float64(absInt(entry-exit)) * (w.SpeedLimit*duration + s.safeGap + s.graph.Simulation.VehicleSize)
 		return s.stopLine(w)-begin >= needed
 	}
 	return s.router.Route(req)

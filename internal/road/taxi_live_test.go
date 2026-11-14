@@ -36,8 +36,8 @@ func TestTaxiLiveLoadPreservesTrips(t *testing.T) {
 	if len(s.taxi.vehicles) < 6 {
 		t.Fatal("busy taxis removed before finishing")
 	}
-	for _, v := range s.taxi.vehicles {
-		if v.ID > 3 && !v.Retiring {
+	for i, v := range s.taxi.vehicles {
+		if i >= 3 && !v.Retiring {
 			t.Fatal("excess taxi not scheduled to retire")
 		}
 	}

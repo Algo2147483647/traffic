@@ -5,18 +5,21 @@ import (
 	"math"
 	"traffic/internal/foundation"
 	model "traffic/internal/infrastructure/road"
+	"traffic/internal/operations/demand"
 )
 
 // Command is the sole public mutation contract. Graph is an immutable host input;
 // remote callers switch validated presets through the existing control endpoint.
 type Command struct {
-	Kind       string       `json:"kind"`
-	Population int          `json:"population,omitempty"`
-	MaxPeople  int          `json:"max_population,omitempty"`
-	Value      float64      `json:"value,omitempty"`
-	Mode       string       `json:"mode,omitempty"`
-	Taxi       TaxiConfig   `json:"taxi,omitempty"`
-	Graph      *model.Graph `json:"-"`
+	Demand     demand.Config   `json:"demand,omitempty"`
+	Algorithms AlgorithmConfig `json:"algorithms,omitempty"`
+	Kind       string          `json:"kind"`
+	Population int             `json:"population,omitempty"`
+	MaxPeople  int             `json:"max_population,omitempty"`
+	Value      float64         `json:"value,omitempty"`
+	Mode       string          `json:"mode,omitempty"`
+	Taxi       TaxiConfig      `json:"taxi,omitempty"`
+	Graph      *model.Graph    `json:"-"`
 }
 type Arrival struct {
 	Kind       string
@@ -29,6 +32,9 @@ func (s *Simulation) bindJournal() { s.journal.Stamp = s.stamp; s.journal.Tick =
 func (s *Simulation) QueueCommand(e foundation.Envelope[Command]) (uint64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.commands.Len() >= 4096 {
+		return 0, fmt.Errorf("command queue is full")
+	}
 	if !e.Valid(s.stamp) {
 		return 0, fmt.Errorf("stale command revision")
 	}
@@ -48,6 +54,15 @@ func (s *Simulation) QueueCommand(e foundation.Envelope[Command]) (uint64, error
 	return s.commands.Push(e), nil
 }
 func copyCommand(c Command) Command {
+	for _, choice := range []*AlgorithmChoice{&c.Algorithms.Route, &c.Algorithms.Signal} {
+		if choice.Parameters != nil {
+			p := map[string]float64{}
+			for k, v := range choice.Parameters {
+				p[k] = v
+			}
+			choice.Parameters = p
+		}
+	}
 	if c.Taxi.Parameters != nil {
 		p := map[string]float64{}
 		for k, v := range c.Taxi.Parameters {
@@ -71,7 +86,11 @@ func validateCommand(c Command) error {
 		return fmt.Errorf("command value must be finite")
 	}
 	switch c.Kind {
-	case "pause", "resume", "reset", "set_mode", "set_taxi_load", "step":
+	case "pause", "resume", "reset", "set_mode", "set_taxi_load", "step", "set_algorithms", "set_demand", "set_taxi_config":
+	case "set_walk_speed":
+		if c.Value < .3 || c.Value > 3 {
+			return fmt.Errorf("walking speed must be 0.3-3 m/s")
+		}
 	case "set_time_scale":
 		if c.Value <= 0 || c.Value > 10 {
 			return fmt.Errorf("invalid playback rate")
@@ -106,7 +125,7 @@ func (s *Simulation) drainCommandsLocked() map[uint64]error {
 			err = s.applyCommandLocked(e.Payload)
 		}
 		results[e.Sequence] = err
-		if err == nil {
+		if err == nil && e.Payload.Kind != "step" {
 			s.stamp.World++
 		}
 		s.bindJournal()
@@ -120,6 +139,12 @@ func (s *Simulation) drainCommandsLocked() map[uint64]error {
 }
 func (s *Simulation) applyCommandLocked(c Command) error {
 	switch c.Kind {
+	case "set_taxi_config":
+		return s.setTaxiConfigLocked(c.Taxi)
+	case "set_demand":
+		return s.setDemand(c.Demand)
+	case "set_algorithms":
+		return s.setAlgorithms(c.Algorithms)
 	case "pause":
 		s.setPausedLocked(true)
 	case "resume":
@@ -128,6 +153,8 @@ func (s *Simulation) applyCommandLocked(c Command) error {
 		s.stepLocked(c.Value)
 	case "reset":
 		s.resetLockedCommand(c.Population)
+	case "set_walk_speed":
+		s.walkSpeed = c.Value
 	case "set_time_scale":
 		s.setTimeScaleLocked(c.Value)
 	case "set_spacing":
@@ -167,10 +194,10 @@ func (s *Simulation) commitArrivalsLocked() {
 			continue
 		}
 		if s.taxi != nil {
-			valid := false
+			valid := a.Task == 0
 			for _, v := range s.taxi.vehicles {
-				if v.ID == p.id && v.OrderID == a.Task {
-					valid = true
+				if v.ID == p.id {
+					valid = v.OrderID == a.Task
 					break
 				}
 			}

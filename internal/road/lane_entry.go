@@ -83,7 +83,7 @@ func (s *Simulation) routeCompatibleReceivingLanes(person *personState, way *mod
 		usable := s.stopLine(way) - math.Min(s.graph.Simulation.Intersection, way.Length)
 		for _, entry := range allowed {
 			for _, target := range required {
-				needed := float64(absInt(entry-target)) * (math.Min(way.SpeedLimit, s.graph.Simulation.DriveSpeed)*laneChangeBaseDuration + s.safeGap + s.graph.Simulation.VehicleSize)
+				needed := float64(absInt(entry-target)) * (way.SpeedLimit*laneChangeBaseDuration + s.safeGap + s.graph.Simulation.VehicleSize)
 				if usable >= needed {
 					compatible = append(compatible, entry)
 					break

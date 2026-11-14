@@ -209,3 +209,31 @@ func TestControlSupportsTenTimesSpeed(t *testing.T) {
 		t.Fatalf("POST time scale above 10x = %d, want %d", response.Code, http.StatusBadRequest)
 	}
 }
+
+func TestScheduledCommandEndpoint(t *testing.T) {
+	h := testHandler(t)
+	get := httptest.NewRecorder()
+	h.ServeHTTP(get, httptest.NewRequest("GET", "/api/snapshot", nil))
+	var snap sim.Snapshot
+	if err := json.Unmarshal(get.Body.Bytes(), &snap); err != nil {
+		t.Fatal(err)
+	}
+	payload, _ := json.Marshal(map[string]any{"stamp": snap.Kernel, "due_tick": snap.Tick, "payload": map[string]any{"kind": "set_spacing", "value": 7}})
+	response := httptest.NewRecorder()
+	h.ServeHTTP(response, httptest.NewRequest("POST", "/api/commands", bytes.NewReader(payload)))
+	if response.Code != 202 {
+		t.Fatal(response.Body.String())
+	}
+	apply := httptest.NewRecorder()
+	h.ServeHTTP(apply, httptest.NewRequest("POST", "/api/control", strings.NewReader(`{"action":"step","delta":0.05}`)))
+	if err := json.Unmarshal(apply.Body.Bytes(), &snap); err != nil || snap.Spacing.SafeGap != 7 {
+		t.Fatal(apply.Body.String())
+	}
+	reset := httptest.NewRecorder()
+	h.ServeHTTP(reset, httptest.NewRequest("POST", "/api/control", strings.NewReader(`{"action":"reset"}`)))
+	stale := httptest.NewRecorder()
+	h.ServeHTTP(stale, httptest.NewRequest("POST", "/api/commands", bytes.NewReader(payload)))
+	if stale.Code != 400 {
+		t.Fatal("stale command accepted")
+	}
+}

@@ -118,8 +118,24 @@ async function createWindow() {
         const algorithms=await get('/api/dispatch/algorithms');
         if(!algorithms.some(a=>a.id==='experimental.wait_balanced'))throw Error('Worker manifest missing');
         await control({action:'set_mode',mode:'taxi',taxi:{fleet:6,orders_per_minute:0,algorithm:'experimental.wait_balanced',seed:71429}});
-        for(let i=0;i<100;i++){snap=await get('/api/snapshot');if(snap.taxi.orders.some(o=>o.state==='Assigned'))break;if(snap.taxi.last_error)throw Error(snap.taxi.last_error);await wait(100);}
+        await control({action:'set_demand',demand:{trips_per_minute:60,taxi_share:1}});
+        const beforeWorkerOrders=snap.taxi.created;
+        for(let i=0;i<150;i++){snap=await control({action:'step',delta:1});if(snap.taxi.created>beforeWorkerOrders&&snap.taxi.orders.some(o=>o.state==='Assigned'))break;if(snap.taxi.last_error)throw Error(snap.taxi.last_error);await wait(30);}
         if(!snap.taxi.orders.some(o=>o.state==='Assigned'))throw Error('Python worker did not assign');
+        const beforeMixTime=snap.time,beforeMixRun=snap.kernel.run;
+        await control({action:'set_demand',demand:{trips_per_minute:30,taxi_share:.5}});
+        snap=await get('/api/snapshot');if(snap.time!==beforeMixTime||snap.kernel.run!==beforeMixRun)throw Error('Mix reset active run');
+        for(let i=0;i<80;i++){snap=await control({action:'step',delta:2});if(snap.people.some(p=>p.journey_id)&&snap.demand.car_trips>0&&snap.demand.taxi_trips>0)break;await wait(20);}
+        if(!snap.people.some(p=>p.journey_id)||!snap.taxi.vehicles.length)throw Error('Both modes did not coexist');
+        if(snap.demand.generated!==snap.demand.queued+snap.demand.active+snap.demand.completed+snap.demand.cancelled)throw Error('Demand conservation failed');
+        await control({action:'set_walk_speed',walk_speed_mps:1.8});
+        const available=await get('/api/algorithms/workers');if(!available.some(a=>a.id==='python.route')||!available.some(a=>a.id==='python.signal'))throw Error('Algorithm manifests missing');
+        await control({action:'set_algorithms',algorithms:{route:{id:'python.route',parameters:{prefer_alternative:1}},signal:{id:'python.signal',parameters:{}}}});
+        for(let i=0;i<120;i++){snap=await control({action:'step',delta:.05});if(snap.algorithms.applied>=2||snap.algorithms.fallbacks)break;await wait(30);}
+        if(snap.algorithms.applied<2||snap.algorithms.fallbacks)throw Error('External algorithms: '+JSON.stringify(snap.algorithms));
+        taxiResult.mixed=snap.demand;taxiResult.algorithms=snap.algorithms;
+        if(snap.walk_speed_mps!==1.8)throw Error('Walking setting not applied');
+        await control({action:'set_algorithms',algorithms:{route:{id:'native'},signal:{id:'native'}}});
         await control({action:'pause'});document.querySelector('#settings-toggle').click();await wait(150);
       }
       if(errors.length) throw Error(errors.join('; '));

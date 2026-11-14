@@ -68,3 +68,6 @@ func (q *Queue[T]) Drain(tick uint64) []Envelope[T] {
 	return ready
 }
 func (q *Queue[T]) Clear() { q.pending = nil }
+
+func (q *Queue[T]) Len() int               { return len(q.pending) }
+func (q *Queue[T]) Discard() []Envelope[T] { p := q.pending; q.pending = nil; return p }

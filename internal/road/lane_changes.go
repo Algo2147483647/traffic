@@ -57,7 +57,7 @@ func (s *Simulation) planLaneChangesLocked() {
 
 		routeLane, routeDistance, constrained := s.routeLaneTarget(person, way)
 		difference := absInt(routeLane - person.lane)
-		desiredSpeed := math.Min(s.graph.Simulation.DriveSpeed, way.SpeedLimit)
+		desiredSpeed := way.SpeedLimit
 		preparationDistance := math.Max(routePreparationBase, float64(difference)*(desiredSpeed*laneChangeBaseDuration+s.safeGap+s.graph.Simulation.VehicleSize))
 		if constrained && difference > 0 && routeDistance <= preparationDistance {
 			target := person.lane
@@ -280,7 +280,7 @@ func (s *Simulation) advanceRoadVehiclesLocked(dt float64) {
 		}
 		way := s.graph.Ways[person.wayID]
 		active = append(active, person)
-		constraints[person] = laneSpeedConstraint{speed: s.policySpeed(math.Min(s.graph.Simulation.DriveSpeed, way.SpeedLimit)), safety: math.Inf(1)}
+		constraints[person] = laneSpeedConstraint{speed: s.policySpeed(way.SpeedLimit), safety: math.Inf(1)}
 		for lane := 0; lane < way.Lanes; lane++ {
 			if occupiesLane(person, lane) {
 				key := fmt.Sprintf("%s:%d", person.wayID, lane)
@@ -318,6 +318,9 @@ func (s *Simulation) advanceRoadVehiclesLocked(dt float64) {
 			flowSpeeds[p] = s.downstreamSpeed(p, r, math.Max(0, s.roadTarget(p, w)-p.along), dt)
 		}
 		c := constraints[p]
+		if r := s.flowReservation(p); r != nil {
+			c.safety = math.Min(c.safety, s.downstreamSafety(p, r, math.Max(0, s.roadTarget(p, w)-p.along), dt))
+		}
 		for _, other := range s.people {
 			if other == p || other.state != "turning" || other.wayID != p.wayID || other.lane != p.lane {
 				continue
