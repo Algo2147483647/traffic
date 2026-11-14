@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"traffic/internal/dispatch"
 	"traffic/internal/model"
 	"traffic/internal/sim"
 )
@@ -88,6 +89,7 @@ func newServer(simulation *sim.Simulation, logger *slog.Logger, current string, 
 	server := &Server{simulation: simulation, logger: logger, shutdown: make(chan struct{}), presets: presets, presetList: presetList, current: current}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", server.health)
+	mux.HandleFunc("GET /api/dispatch/algorithms", func(w http.ResponseWriter, r *http.Request) { server.writeJSON(w, 200, dispatch.List()) })
 	mux.HandleFunc("GET /api/city", server.city)
 	mux.HandleFunc("GET /api/presets", server.presetOptions)
 	mux.HandleFunc("GET /api/snapshot", server.snapshot)
@@ -207,14 +209,16 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 }
 
 type controlRequest struct {
-	Action     string  `json:"action"`
-	TimeScale  float64 `json:"time_scale,omitempty"`
-	Population int     `json:"population,omitempty"`
-	SpawnRate  float64 `json:"spawn_rate_per_second,omitempty"`
-	MaxPeople  int     `json:"max_population,omitempty"`
-	Delta      float64 `json:"delta,omitempty"`
-	SafeGap    float64 `json:"safe_gap,omitempty"`
-	PresetID   string  `json:"preset_id,omitempty"`
+	Mode       string         `json:"mode,omitempty"`
+	Taxi       sim.TaxiConfig `json:"taxi,omitempty"`
+	Action     string         `json:"action"`
+	TimeScale  float64        `json:"time_scale,omitempty"`
+	Population int            `json:"population,omitempty"`
+	SpawnRate  float64        `json:"spawn_rate_per_second,omitempty"`
+	MaxPeople  int            `json:"max_population,omitempty"`
+	Delta      float64        `json:"delta,omitempty"`
+	SafeGap    float64        `json:"safe_gap,omitempty"`
+	PresetID   string         `json:"preset_id,omitempty"`
 }
 
 func (s *Server) control(w http.ResponseWriter, r *http.Request) {
@@ -226,6 +230,17 @@ func (s *Server) control(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch request.Action {
+	case "set_taxi_load":
+		if err := s.simulation.SetTaxiLoad(request.Taxi.Fleet, request.Taxi.Demand); err != nil {
+			s.writeError(w, 400, err.Error())
+			return
+		}
+
+	case "set_mode":
+		if err := s.simulation.SetMode(request.Mode, request.Taxi); err != nil {
+			s.writeError(w, 400, err.Error())
+			return
+		}
 	case "pause":
 		s.simulation.SetPaused(true)
 	case "resume":

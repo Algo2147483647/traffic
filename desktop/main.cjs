@@ -25,6 +25,7 @@ async function createWindow() {
   await window.loadURL(backend.url + '/');
   if (smoke) {
     const result = await window.webContents.executeJavaScript(`(async () => {
+      const drawnLabels=[];const originalFillText=CanvasRenderingContext2D.prototype.fillText;CanvasRenderingContext2D.prototype.fillText=function(text,...args){if(drawnLabels.length>2000)drawnLabels.splice(0,1000);drawnLabels.push(String(text));return originalFillText.call(this,text,...args);};
       const errors=[];window.addEventListener('error',event=>errors.push(event.message));
       const wait = ms => new Promise(r => setTimeout(r, ms));
       for (let i = 0; i < 100 && document.querySelector('#map-preset').options[0]?.value !== "preset-1"; i++) await wait(100);
@@ -35,6 +36,17 @@ async function createWindow() {
       if (preset) { await control({action:'set_preset',preset_id:preset}); await wait(800); }
       document.querySelector('#settings-toggle').click();
       if (document.querySelector('#settings-panel').hidden) throw Error('Settings did not open');
+      const panel=document.querySelector('#settings-panel'),initial=panel.getBoundingClientRect();
+      const drag=document.querySelector('#settings-drag');
+      drag.dispatchEvent(new PointerEvent('pointerdown',{pointerId:41,button:0,clientX:initial.left+60,clientY:initial.top+20,bubbles:true}));
+      window.dispatchEvent(new PointerEvent('pointermove',{pointerId:41,clientX:initial.left+140,clientY:initial.top+65}));window.dispatchEvent(new PointerEvent('pointerup',{pointerId:41}));
+      const moved=panel.getBoundingClientRect();if(moved.left<=initial.left||moved.top<=initial.top)throw Error('Settings drag failed');
+      document.querySelector('#settings-resize').dispatchEvent(new PointerEvent('pointerdown',{pointerId:42,button:0,clientX:moved.right,clientY:moved.bottom,bubbles:true}));
+      window.dispatchEvent(new PointerEvent('pointermove',{pointerId:42,clientX:moved.right+80,clientY:moved.bottom+30}));window.dispatchEvent(new PointerEvent('pointerup',{pointerId:42}));
+      const resized=panel.getBoundingClientRect();if(resized.width<=moved.width)throw Error('Settings resize failed');
+      document.querySelector('#settings-maximize').click();if(panel.getBoundingClientRect().width<innerWidth-20)throw Error('Settings maximize failed');
+      document.querySelector('#settings-maximize').click();if(Math.abs(panel.getBoundingClientRect().width-resized.width)>1)throw Error('Settings restore failed');
+
       for (const layer of ['ground','bridge','ramp','all']) {
         const select=document.querySelector('#layer-filter');select.value=layer;select.dispatchEvent(new Event('change'));await wait(80);
       }
@@ -46,17 +58,53 @@ async function createWindow() {
       const after = await get('/api/snapshot');
       if (after.time <= before.time) throw Error('Simulation did not advance');
       if (preset && ${JSON.stringify(process.env.TRAFFIC_SMOKE_DETAIL === '1')}) {
-        const canvas=document.querySelector('#city-canvas'), rect=canvas.getBoundingClientRect();
-        canvas.dispatchEvent(new MouseEvent('click',{clientX:rect.width/2,clientY:rect.height/2,bubbles:true}));await wait(200);
-        if(document.querySelector('#interchange-inspector').hidden) throw Error('Interchange details did not open');
-        const movements=document.querySelector('#interchange-movement');
-        if(movements.options.length!==12) throw Error('Missing interchange movements');
-        for(let i=0;i<12;i++){movements.value=String(i);movements.dispatchEvent(new Event('change'));}
-        movements.value='1';movements.dispatchEvent(new Event('change'));await wait(100);
+        const city=await get('/api/city');
+        if(city.world_units_per_km!==1000)throw Error('Missing coordinate scale');
+        if(!drawnLabels.includes('X · km')||!drawnLabels.includes('Y · km')||!drawnLabels.includes('6 × 6 km'))throw Error('Missing kilometer rulers');
+        document.querySelector('#zoom-in-button').click();await wait(100);
+        document.querySelector('#zoom-out-button').click();await wait(100);
+        for(const group of city.interchanges){
+          const canvas=document.querySelector('#city-canvas'),rect=canvas.getBoundingClientRect(),b=city.bounds;
+          const scale=Math.min((rect.width-68)/(b.max_x-b.min_x),(rect.height-68)/(b.max_y-b.min_y));
+          const x=rect.left+rect.width/2+(group.center.x-(b.min_x+b.max_x)/2)*scale;
+          const y=rect.top+rect.height/2+(group.center.y-(b.min_y+b.max_y)/2)*scale;
+          canvas.dispatchEvent(new MouseEvent('click',{clientX:x,clientY:y,bubbles:true}));await wait(100);
+          if(document.querySelector('#interchange-inspector').hidden)throw Error('Interchange details did not open: '+group.id);
+          const movements=document.querySelector('#interchange-movement');
+          if(movements.options.length!==group.routes.length)throw Error('Missing interchange movements: '+group.id);
+          for(let i=0;i<group.routes.length;i++){movements.value=String(i);movements.dispatchEvent(new Event('change'));}
+        }
+        document.querySelector("#inspector-toggle").click();await wait(100);
+      }
+      let taxiResult=null;
+      if (${JSON.stringify(process.env.TRAFFIC_SMOKE_TAXI === '1')}) {
+        document.querySelector('#taxi-fleet').value='6';document.querySelector('#taxi-demand').value='0';
+        document.querySelector('#simulation-mode').value='taxi';document.querySelector('#simulation-mode').dispatchEvent(new Event('change'));
+        for(let i=0;i<50&&(await get('/api/snapshot')).mode!=='taxi';i++)await wait(100);
+        let snap=await get('/api/snapshot');if(snap.mode!=='taxi'||snap.taxi.vehicles.length!==6)throw Error('Taxi mode did not start');
+        await control({action:'pause'});
+        for(let i=0;i<160;i++){snap=await control({action:'step',delta:4});if(snap.taxi.completed>=2)break;}
+        if(snap.taxi.completed<2||snap.taxi.picked<2)throw Error('Taxi pickup/dropoff failed');
+        taxiResult={completed:snap.taxi.completed,picked:snap.taxi.picked};
+        const liveTime=snap.time,liveCreated=snap.taxi.created;
+        document.querySelector('#taxi-fleet-range').value='9';document.querySelector('#taxi-fleet-range').dispatchEvent(new Event('input'));
+        document.querySelector('#taxi-demand-range').value='15';document.querySelector('#taxi-demand-range').dispatchEvent(new Event('input'));
+        document.querySelector('#taxi-load-apply').click();
+        for(let i=0;i<40;i++){snap=await get('/api/snapshot');if(snap.taxi.config.fleet===9)break;await wait(50);}
+        if(snap.taxi.config.fleet!==9||snap.taxi.config.orders_per_minute!==15||snap.taxi.vehicles.length!==9)throw Error('Live taxi controls failed');
+        if(snap.time!==liveTime||snap.taxi.created!==liveCreated)throw Error('Live controls reset scenario');
+
+        await control({action:'set_mode',mode:'traffic'});if((await get('/api/snapshot')).mode!=='traffic')throw Error('Traffic mode not restored');
+        const algorithms=await get('/api/dispatch/algorithms');
+        if(!algorithms.some(a=>a.id==='experimental.wait_balanced'))throw Error('Worker manifest missing');
+        await control({action:'set_mode',mode:'taxi',taxi:{fleet:6,orders_per_minute:0,algorithm:'experimental.wait_balanced',seed:71429}});
+        for(let i=0;i<100;i++){snap=await get('/api/snapshot');if(snap.taxi.orders.some(o=>o.state==='Assigned'))break;if(snap.taxi.last_error)throw Error(snap.taxi.last_error);await wait(100);}
+        if(!snap.taxi.orders.some(o=>o.state==='Assigned'))throw Error('Python worker did not assign');
+        await control({action:'pause'});document.querySelector('#settings-toggle').click();await wait(150);
       }
       if(errors.length) throw Error(errors.join('; '));
       if (typeof require !== 'undefined') throw Error('Renderer has Node access');
-      return { title: document.title, people: after.people.length, time: after.time, presets: document.querySelector('#map-preset').options.length };
+      return { taxiResult, title: document.title, people: after.people.length, time: after.time, presets: document.querySelector('#map-preset').options.length };
     })()`);
     const output = process.env.TRAFFIC_SMOKE_OUTPUT || path.join(app.getPath('temp'), 'traffic-desktop-smoke.png');
     fs.writeFileSync(output, (await window.webContents.capturePage()).toPNG());

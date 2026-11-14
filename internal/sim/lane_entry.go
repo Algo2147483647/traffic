@@ -66,6 +66,22 @@ func (s *Simulation) routeCompatibleReceivingLanes(person *personState, way *mod
 			compatible = append(compatible, lane)
 		}
 	}
+	// A continuous-flow entry may feed a sufficiently long preparation road.
+	// Keep the legal entry connector; prepare for the next exit on that road.
+	// Without this, a 2-lane branch feeding a 3-lane approach can wait forever
+	// for an outer-lane connector which does not exist at the entry node.
+	if len(compatible) == 0 && intersection.TrafficControl.Mode == "flow" {
+		usable := s.stopLine(way) - math.Min(s.graph.Simulation.Intersection, way.Length)
+		for _, entry := range allowed {
+			for _, target := range required {
+				needed := float64(absInt(entry-target)) * (math.Min(way.SpeedLimit, s.graph.Simulation.DriveSpeed)*laneChangeBaseDuration + s.safeGap + s.graph.Simulation.VehicleSize)
+				if usable >= needed {
+					compatible = append(compatible, entry)
+					break
+				}
+			}
+		}
+	}
 	return compatible
 }
 

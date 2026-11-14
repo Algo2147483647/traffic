@@ -11,11 +11,14 @@ func TestCloverleafMovements(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if len(g.Interchanges) != 1 || len(g.Interchanges[0].Routes) != 12 {
+	if len(g.Interchanges) != 5 || len(g.Interchanges[0].Routes) != 12 {
 		t.Fatal("missing interchange route catalogue")
 	}
 	loops, rights := 0, 0
 	for _, w := range g.Ways {
+		if g.Intersections[w.From].Interchange != "C" {
+			continue
+		}
 		if w.Role == "loop_ramp" {
 			loops++
 			if len(w.Points) < 80 || w.Lanes != 1 {

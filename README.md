@@ -91,7 +91,9 @@ The top-bar map selector exposes two live presets:
 - **Preset 2 — Four-Cell Interchange Network** has a central full cloverleaf
   with four loop ramps, four direct right-turn ramps and four two-lane
   collector-distributor carriageways. The four peripheral nodes retain their
-  three-arm folded diamonds. There are 88 nodes and 128 directed ways.
+  three-arm trumpets. There are 108 nodes and 136 directed ways.
+  Each trumpet supports all six arm-to-arm movements without signals.
+  Kilometer edge rulers and a dynamic scale bar show the 6 x 6 km map domain.
   Mainline through traffic bypasses the C/D weaving sections without signals.
 
 Settings → **LAYER** selects **All layers / Ground / Bridges / Ramps**.
@@ -115,7 +117,7 @@ npm --prefix desktop test
 ```
 
 The compiler reads `configs/interchange-design.json`. Generation is deterministic.
-Only the diamond/folded-diamond and cloverleaf templates are implemented; other
+The trumpet and cloverleaf templates are implemented; other
 common types are documented design references. Road paths sampled by the compiler
 are shared by rendering and simulation. Central flow nodes use explicit lane
 connections. Trip endpoints cannot attach to limited-access mainline/C/D roads.
@@ -425,3 +427,7 @@ internal/server/             HTTP/SSE API and embedded HTML UI
 internal/server/web/         standalone HTML, CSS, and canvas renderer
 app/                         publishable visualization surface
 ```
+
+## Taxi mode and experimental dispatch
+
+Settings > MODE switches between Traffic and Taxi. Taxi supports persistent vehicles, pickup/dropoff, six native assignment policies and local experimental Python/executable workers. See [implementation and operation](docs/taxi-implementation.md), [experimental extension guide](experiments/dispatch/README.md), and the [architecture target](docs/taxi-integration-design.md).

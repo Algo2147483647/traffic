@@ -2,7 +2,7 @@
 
 ## Scope and design decision
 
-The four-cell map keeps its four peripheral folded-diamond three-arm interchanges.
+The four-cell map uses four rotated three-arm trumpet interchanges at its outer junctions.
 The central interchange becomes a full cloverleaf: four directional through
 carriageways, four 270-degree left-turn loops, four direct right-turn ramps,
 and four two-lane collector-distributor (C/D) carriageways. Mainline through
@@ -38,9 +38,9 @@ clearance, roadside protection, signing and engineering review.
 
 | Type | Suitable role | Essential geometry / operation | Main limitation | Software status |
 |---|---|---|---|---|
-| Diamond | Freeway to surface arterial | Four ramps, two surface terminals; turn storage and coordinated signals | Terminal queues can spill back | Generator supported |
-| Folded diamond | Constrained three-arm access | Folded ramp arrangement, surface connector and terminals | Extra turns and terminal conflicts | Four peripheral instances |
-| Trumpet | Three-arm freeway connection | One loop, directional ramps; independent merges/diverges | Loop speed/capacity; difficult fourth-arm expansion | Design catalogue only |
+| Diamond | Freeway to surface arterial | Four ramps, two surface terminals; turn storage and coordinated signals | Terminal queues can spill back | Design catalogue only |
+| Folded diamond | Constrained three-arm access | Folded ramp arrangement, surface connector and terminals | Extra turns and terminal conflicts | Replaced by trumpets |
+| Trumpet | Three-arm freeway connection | One loop, directional ramps; independent merges/diverges | Loop speed/capacity; difficult fourth-arm expansion | Four peripheral instances |
 | Full cloverleaf | Four-arm connection | Four loops, four right ramps; two crossing levels; C/D preferred | Weaving and loop capacity | Central instance supported |
 | Partial cloverleaf | Constrained site / uneven turns | Selected loops, other turns at surface terminals | Residual crossing conflicts | Design catalogue only |
 | Directional T / stack | High turning volumes | Direct/semi-direct ramps, multiple structures/levels | Footprint, structures and cost | Design catalogue only |
@@ -88,6 +88,31 @@ ramp merges enter the outer receiving lane. A turn never fans across every lane.
 The C/D outer lane serves weaving while its inner lane provides a through option.
 Mainline entry/exit transitions are separate roads; the current engine does not
 simulate a continuously growing lane width or a calibrated acceleration lane.
+
+## Peripheral trumpet geometry
+
+The north instance uses an east/west mainline and a south branch. Rotate it for
+south, west and east; cardinal route labels rotate with the geometry. Each has
+six non-U-turn movements: two mainline through, two direct right turns, one
+270-degree loop and one semi-direct left turn. Every merge/diverge has explicit
+lane connections and continuous flow, without folded-diamond signal terminals.
+
+Mainline portals are at +/-900, splits/merges at +/-650; the loop radius is 100.
+The branch splits at 360 and ends at 520. Opposing carriageways are offset 24
+from their axis. Mainline roads stay at ground level; two branch decks cross
+above them at elevation 24. The loop and semi-direct ramp connect to those decks;
+the two right ramps stay at ground level. Curves preserve endpoint positions and
+tangents. These numbers are simulation parameters, not certified ramp minima.
+
+## Kilometer coordinates
+
+`world_units_per_km` is carried from configuration through the graph and city API.
+It defaults to 1000 for existing maps; the four-cell profile explicitly sets 1000.
+The four-cell domain is **6 x 6 km**. X grows right and Y grows down, measured
+from the map's upper-left bound. Edge rulers follow zoom/pan; a bottom scale bar
+shows a physical distance and the full domain size. There is no background grid.
+This defines horizontal display distances; speed, vehicle dimensions and vertical
+clearance still require separate calibration before interpreting engineering performance.
 
 ## Validation and release gates
 

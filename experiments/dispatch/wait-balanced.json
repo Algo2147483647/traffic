@@ -1,0 +1,1 @@
+{"id":"experimental.wait_balanced","name":"Experimental wait balanced (Python)","contract_version":1,"command":["python","wait_balanced.py"],"working_directory":".","wall_timeout_ms":2000}

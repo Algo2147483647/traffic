@@ -117,14 +117,47 @@
       if (state.layerFilter !== "all" && state.layerFilter !== layer) continue;
       renderStructure = layer;
       drawWays(); drawIntersectionPads(); drawSelectedTrip(); drawSignals();
-      drawLaneDirectionMarkings(); drawIntersections(); drawPeople();
+      drawLaneDirectionMarkings(); drawIntersections(); drawTaxiStops(); drawPeople();
     }
     renderStructure = null;
     const groups = new Map();
     state.city.intersections.forEach(n => { if(n.interchange && !groups.has(n.interchange)) groups.set(n.interchange, n); });
     ctx.font="12px Times New Roman"; ctx.fillStyle="#dddddd";
-    groups.forEach((n,id) => { const members=state.city.intersections.filter(i=>i.interchange===id), p=screen({x:members.reduce((a,n)=>a+n.position.x,0)/members.length,y:members.reduce((a,n)=>a+n.position.y,0)/members.length});ctx.fillText(id === "C" ? "Central cloverleaf" : `${id} interchange`,p.x+12,p.y-28); });
+    groups.forEach((n,id) => { const members=state.city.intersections.filter(i=>i.interchange===id), p=screen({x:members.reduce((a,n)=>a+n.position.x,0)/members.length,y:members.reduce((a,n)=>a+n.position.y,0)/members.length});ctx.fillText((state.city.interchanges||[]).find(g=>g.id===id)?.name || `${id} interchange`,p.x+12,p.y-28); });
+    drawCoordinateRulers();
 
+  }
+
+  function drawCoordinateRulers() {
+    const t=currentTransform(), b=state.city.bounds, units=state.city.world_units_per_km || 1000;
+    const nice=value=>{const power=10**Math.floor(Math.log10(value)), n=value/power;return (n>=5?5:n>=2?2:1)*power;};
+    const step=nice(110/t.scale/units), stepWorld=step*units;
+    const format=value=>Number(value.toFixed(Math.max(0,-Math.floor(Math.log10(step))+1))).toString();
+    const stats=document.querySelector(".stats-overlay").getBoundingClientRect();
+    const details=document.querySelector(".right-stack").getBoundingClientRect();
+    const detailsOpen=details.width>0 && !document.querySelector(".right-stack").classList.contains("collapsed");
+    const left=80, top=26, right=detailsOpen?Math.min(t.width-68,details.left-14):t.width-68;
+    const bottom=Math.min(t.height-50,stats.top-12);
+    ctx.save();ctx.font="12px Times New Roman";ctx.fillStyle="#bcbcbc";ctx.strokeStyle="#777777";ctx.lineWidth=1;
+    ctx.shadowColor="#080808";ctx.shadowBlur=5;
+    // Edge rulers only: no lines cross the road surface.
+    ctx.beginPath();ctx.moveTo(left,top);ctx.lineTo(right,top);ctx.moveTo(left,top);ctx.lineTo(left,bottom);ctx.stroke();
+    const ticks=(min,max,origin,screenMin,screenMax,drawTick)=>{
+      const start=Math.max(min,(screenMin-origin)/t.scale), end=Math.min(max,(screenMax-origin)/t.scale);
+      for(let i=Math.ceil((start-min)/stepWorld-1e-9);min+i*stepWorld<=end+1e-8;i++)drawTick(origin+(min+i*stepWorld)*t.scale,format(i*step));
+    };
+    ctx.textAlign="center";ctx.textBaseline="bottom";
+    ticks(b.min_x,b.max_x,t.ox,left,right,(x,label)=>{ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,top+5);ctx.stroke();ctx.fillText(label,x,top-4);});
+    ctx.textAlign="right";ctx.textBaseline="middle";
+    ticks(b.min_y,b.max_y,t.oy,top,bottom,(y,label)=>{ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(left+5,y);ctx.stroke();ctx.fillText(label,left-7,y);});
+    ctx.textAlign="left";ctx.fillText("X · km",left+10,top-12);
+    ctx.fillText("Y · km",left+10,top+20);
+    const km=nice(130/t.scale/units), pixels=km*units*t.scale, x=(t.width-pixels)/2, y=t.height-24;
+    ctx.beginPath();ctx.moveTo(x,y-5);ctx.lineTo(x,y);ctx.lineTo(x+pixels,y);ctx.lineTo(x+pixels,y-5);ctx.stroke();
+    ctx.textAlign="center";ctx.textBaseline="bottom";ctx.fillText(`${Number(km.toPrecision(4))} km`,t.width/2,y-6);
+    ctx.textBaseline="top";ctx.font="11px Times New Roman";
+    ctx.fillText(`${Number(((b.max_x-b.min_x)/units).toFixed(3))} × ${Number(((b.max_y-b.min_y)/units).toFixed(3))} km`,t.width/2,y+4);
+    ctx.restore();
   }
 
   function wayVisible(way) {
@@ -376,6 +409,15 @@
     })));
   }
 
+  function drawTaxiStops(){
+    const taxi=state.snapshot?.taxi;if(!taxi||renderStructure!=="ground")return;
+    for(const stop of taxi.stops){const p=screen(stop.position),order=taxi.orders.find(o=>o.pickup===stop.id&&["Waiting","Assigned","Boarding"].includes(o.state));ctx.save();ctx.strokeStyle=order?"#efc85b":"#7196a1";ctx.lineWidth=1;ctx.strokeRect(p.x-4,p.y-4,8,8);if(order){ctx.fillStyle="#efc85b";ctx.font="12px Times New Roman";ctx.fillText(`#${order.id}`,p.x+8,p.y-5);}ctx.restore();}
+  }
+  function showOrder(id){const t=state.snapshot?.taxi,o=t?.orders.find(o=>o.id===id);if(!o)return;$("order-title").textContent=`Order #${o.id}`;$("order-state").textContent=o.state;
+    const values=[["Taxi",o.vehicle_id?`T-${o.vehicle_id}`:"Unassigned"],["Pickup",o.pickup.replace("stop:","")],["Destination",o.destination.replace("stop:","")],["Requested",`${o.created_s.toFixed(1)} s`],["Pickup estimate",`${o.pickup_eta_s.toFixed(1)} s (free flow)`],["Wait",`${((o.state==="InService"||o.state==="Completed"||o.state==="Boarding")?o.picked_s-o.created_s:state.snapshot.time-o.created_s).toFixed(1)} s`]];
+    $("order-facts").replaceChildren(...values.map(([key,value])=>{const row=document.createElement("div"),a=document.createElement("dt"),b=document.createElement("dd");a.textContent=key;b.textContent=value;row.append(a,b);return row;}));
+  }
+
   function drawPeople() {
     if (!state.snapshot) return;
     const scale = currentTransform().scale, ways = Object.fromEntries(state.city.ways.map((way) => [way.id, way]));
@@ -387,7 +429,7 @@
       if (person.state.startsWith("walking") || person.state === "arrived") {
         ctx.fillStyle = person.state === "arrived" ? "#ffffff" : "#efc85b"; ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=4*scale;ctx.beginPath();ctx.arc(0,0,4*scale,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle="rgba(7,16,14,.9)";ctx.lineWidth=.8*scale;ctx.stroke();
       } else {
-        const way=ways[person.way_id],length=(state.city.simulation.vehicle_size||12)*scale,width=Math.min(6.5,(way?.lane_width||7)*.72)*scale;ctx.fillStyle=person.state==="waiting"?"#ff785f":"#c8f26b";ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=4*scale;ctx.fillRect(-length/2,-width/2,length,width);ctx.shadowBlur=0;ctx.strokeStyle="rgba(6,14,12,.92)";ctx.lineWidth=.7*scale;ctx.strokeRect(-length/2,-width/2,length,width);
+        const way=ways[person.way_id],length=(state.city.simulation.vehicle_size||12)*scale,width=Math.min(6.5,(way?.lane_width||7)*.72)*scale;const taxi=state.snapshot.taxi?.vehicles.find(v=>v.id===person.id);ctx.fillStyle=taxi?({Idle:"#a8b0b5",ToPickup:"#efc85b",Boarding:"#efc85b",WithPassenger:"#69d6ef",Alighting:"#69d6ef"}[taxi.state]||"#eee"):(person.state==="waiting"?"#ff785f":"#c8f26b");ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=4*scale;ctx.fillRect(-length/2,-width/2,length,width);ctx.shadowBlur=0;ctx.strokeStyle="rgba(6,14,12,.92)";ctx.lineWidth=.7*scale;ctx.strokeRect(-length/2,-width/2,length,width);
       }
       if (selected) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.2 * scale; ctx.beginPath(); ctx.arc(0, 0, 8 * scale, 0, Math.PI * 2); ctx.stroke(); }
       ctx.restore();
@@ -395,7 +437,17 @@
   }
 
   function updateSnapshot(snapshot) {
+    if(state.snapshot?.mode!==snapshot.mode)state.selected=null;
     state.snapshot = snapshot;
+    const taxi=snapshot.taxi;$("simulation-mode").value=snapshot.mode||"traffic";$("taxi-settings").hidden=!taxi;$("traffic-settings").hidden=Boolean(taxi);$("taxi-stats").hidden=!taxi;$("population-label").textContent=taxi?"taxis":"population";
+    if(taxi&&state.taxiConfigKey!==JSON.stringify(taxi.config)){state.taxiConfigKey=JSON.stringify(taxi.config);$("taxi-load-feedback").textContent="";$("taxi-fleet").value=taxi.config.fleet;$("taxi-fleet-range").value=taxi.config.fleet;$("taxi-demand").value=taxi.config.orders_per_minute;$("taxi-demand-range").value=taxi.config.orders_per_minute;$("taxi-seed").value=taxi.config.seed;$("taxi-interval").value=taxi.config.dispatch_interval_s;$("taxi-algorithm").value=taxi.config.algorithm;$("taxi-parameters").value=JSON.stringify(taxi.config.parameters||{});}
+    if(taxi){
+      $("taxi-created").textContent=taxi.created;$("taxi-picked").textContent=taxi.picked;$("taxi-completed").textContent=taxi.completed;$("taxi-cancelled").textContent=taxi.cancelled;$("taxi-wait").textContent=`${taxi.mean_wait_s.toFixed(1)} s`;$("taxi-solver").textContent=taxi.solving?"Computing…":`${taxi.solver_ms.toFixed(1)} ms`;
+      const retiring=taxi.vehicles.filter(v=>v.retiring).length;
+      $("taxi-fleet-status").textContent=`${taxi.vehicles.length} active${retiring?` · ${retiring} finishing`:""}${taxi.vehicles.length<taxi.config.fleet?` · target ${taxi.config.fleet}`:""}`;
+      $("taxi-error").textContent=taxi.last_error||"";
+    }
+
     updateComputeRate(snapshot);
     const minutes = Math.floor(snapshot.time / 60).toString().padStart(2, "0"), seconds = (snapshot.time % 60).toFixed(1).padStart(4, "0");
     $("sim-time").textContent = `${minutes}:${seconds}`; $("people-count").textContent = snapshot.people.length;
@@ -422,6 +474,7 @@
   }
 
   function updateCity(city) {
+    loadPresets();
     state.city = city; state.laneDirections = buildLaneDirections(city);
     $("intersection-count").textContent = city.intersections.filter(n=>n.traffic_control.mode !== "flow").length; $("way-count").textContent = city.ways.length;
     $("lane-count").textContent = city.edges.reduce((sum, edge) => sum + edge.weight, 0);
@@ -438,6 +491,7 @@
   }
 
   function refreshInspector() {
+    $("order-inspector").hidden=state.selected?.type!=="order";if(state.selected?.type==="order")showOrder(state.selected.id);
     $("empty-inspector").hidden = Boolean(state.selected); $("person-inspector").hidden = state.selected?.type !== "person"; $("signal-inspector").hidden = state.selected?.type !== "intersection"; $("interchange-inspector").hidden = state.selected?.type !== "interchange";
     if (state.selected?.type === "person") {
       const person = state.snapshot?.people.find((item) => item.id === state.selected.id); if (person) updatePersonInspector(person);
@@ -446,7 +500,8 @@
   }
 
   function updatePersonInspector(person) {
-    $("person-id").textContent = `P-${String(person.id).padStart(3, "0")}`; $("person-state").textContent = person.state.replaceAll("_", " ").toUpperCase();
+    const taxi=state.snapshot?.taxi?.vehicles.find(v=>v.id===person.id);$("taxi-person-detail").textContent=taxi?`${taxi.state} · ${taxi.order_id?"Order #"+taxi.order_id:"Available"} · Completed ${taxi.completed}`:"";
+    $("person-id").textContent = `${taxi?"T":"P"}-${String(person.id).padStart(3, "0")}`; $("person-state").textContent = person.state.replaceAll("_", " ").toUpperCase();
     $("person-way").textContent = person.way_id ? `${person.way_id} / ${person.lane + 1}${person.lane_change ? ` → L${person.lane_change.to_lane + 1} (${Math.round(person.lane_change.progress * 100)}%, ${person.lane_change.reason})` : ""}` : "on foot"; $("person-reference").textContent = person.reference.intersection_id;
     $("person-position").textContent = `${person.position.x.toFixed(1)}, ${person.position.y.toFixed(1)}`; $("person-origin").textContent = `${person.origin.x.toFixed(0)}, ${person.origin.y.toFixed(0)}`;
     $("person-destination").textContent = `${person.destination.x.toFixed(0)}, ${person.destination.y.toFixed(0)}`; $("person-route").textContent = person.route.join(" → ");
@@ -533,8 +588,8 @@
     const nodes=state.city.intersections.filter(n=>n.interchange===id), nodeIDs=new Set(nodes.map(n=>n.id));
     const ways=state.city.ways.filter(w=>nodeIDs.has(w.from)&&nodeIDs.has(w.to));
     $("interchange-name").textContent=group.name;
-    $("interchange-summary").textContent=`4 loops · 4 right-turn ramps · 4 C/D carriageways`;
-    $("interchange-route-detail").textContent=`${route.turn === "left" ? "Loop ramp via collector-distributor roads" : route.turn === "right" ? "Direct ramp via collector-distributor roads" : "Continuous mainline"} · ${route.way_ids.length} road segments`;
+    $("interchange-summary").textContent=group.type === "trumpet" ? "1 loop · 1 semi-direct ramp · 2 right-turn ramps" : "4 loops · 4 right-turn ramps · 4 C/D carriageways";
+    $("interchange-route-detail").textContent=`${ways.some(w=>ids.has(w.id)&&w.role==="loop_ramp") ? "Loop ramp" : ways.some(w=>ids.has(w.id)&&w.role==="semi_direct_ramp") ? "Semi-direct ramp" : route.turn === "right" ? "Direct right-turn ramp" : "Continuous mainline"} · ${route.way_ids.length} road segments`;
     const saved={ctx,city:state.city,snapshot:state.snapshot,transform:state.transform,camera:state.camera,renderStructure,layerFilter:state.layerFilter};
     try {
       ctx=copy.getContext("2d");state.city={...state.city,ways,intersections:nodes};state.snapshot=null;state.layerFilter="all";
@@ -548,7 +603,7 @@
 
   async function control(action, extras = {}) {
     try { const response = await fetch("/api/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...extras }) }); if (!response.ok) throw new Error(await response.text()); const snapshot = await response.json(); updateSnapshot(snapshot); return snapshot; }
-    catch (error) { setConnection("error", "Control request failed"); console.error(error); return null; }
+    catch (error) { setConnection("error", "Control request failed"); console.error(error);$("taxi-error").textContent=error.message; return null; }
   }
 
   async function loadPresets() {
@@ -603,6 +658,7 @@
   canvas.addEventListener("pointerup", endPointer); canvas.addEventListener("pointercancel", endPointer);
   canvas.addEventListener("click", (event) => {
     if (!state.snapshot || !state.transform) return; const click = canvasPoint(event);
+    const t=state.snapshot.taxi;if(t){const stop=t.stops.find(st=>{const p=screen(st.position);return Math.hypot(p.x-click.x,p.y-click.y)<10;});if(stop){const o=t.orders.find(o=>o.pickup===stop.id&&["Waiting","Assigned","Boarding"].includes(o.state));if(o){state.selected={type:"order",id:o.id};refreshInspector();draw();return;}}}
     let intersectionMatch = null, intersectionDistance = 18;
     state.city.intersections.filter(nodeVisible).sort((a,b)=>(a.layer||0)-(b.layer||0)).forEach((item) => { const p = screen(item.position), d = Math.hypot(p.x - click.x, p.y - click.y); if (d < intersectionDistance) { intersectionMatch = item; intersectionDistance = d; } });
     const group=(state.city.interchanges||[]).find(g => (intersectionMatch?.interchange===g.id) || Math.hypot(screen(g.center).x-click.x,screen(g.center).y-click.y)<45);
@@ -620,12 +676,44 @@
     $("inspector-toggle").setAttribute("aria-expanded", String(!collapsed));
     $("inspector-toggle").setAttribute("aria-label", collapsed ? "Expand details" : "Collapse details");
     $("inspector-toggle").title = collapsed ? "Expand details" : "Collapse details";
+    draw();
   });
   const settingsToggle = $("settings-toggle"), settingsPanel = $("settings-panel");
   function toggleSettings(open) {
     settingsPanel.hidden = !open; settingsToggle.setAttribute("aria-expanded", String(open));
-    if (open) $("settings-close").focus(); else settingsToggle.focus();
+    if (open) {layoutSettings();$("settings-close").focus();} else settingsToggle.focus();
   }
+  let settingsRect={x:88,y:68,width:460,height:650},settingsMaximized=false,settingsGesture=null;
+  try{const saved=JSON.parse(localStorage.getItem("traffic-settings-window"));if(saved&&[saved.x,saved.y,saved.width,saved.height].every(Number.isFinite))settingsRect=saved;}catch{}
+  function layoutSettings(){
+    const availableW=window.innerWidth-16,availableH=window.innerHeight-16;
+    let r=settingsMaximized?{x:8,y:8,width:availableW,height:availableH}:{...settingsRect};
+    r.width=Math.max(Math.min(340,availableW),Math.min(r.width,availableW));r.height=Math.max(Math.min(300,availableH),Math.min(r.height,availableH));
+    r.x=Math.max(8,Math.min(r.x,window.innerWidth-r.width-8));r.y=Math.max(8,Math.min(r.y,window.innerHeight-r.height-8));
+    Object.assign(settingsPanel.style,{left:`${r.x}px`,top:`${r.y}px`,width:`${r.width}px`,height:`${r.height}px`});
+    if(!settingsMaximized)settingsRect=r;
+    $("settings-maximize").textContent=settingsMaximized?"❐":"□";$("settings-maximize").setAttribute("aria-label",settingsMaximized?"Restore settings size":"Maximize settings");$("settings-maximize").title=settingsMaximized?"Restore settings size":"Maximize settings";
+  }
+  function saveSettingsRect(){try{localStorage.setItem("traffic-settings-window",JSON.stringify(settingsRect));}catch{}}
+  function maximizeSettings(){settingsMaximized=!settingsMaximized;layoutSettings();}
+  $("settings-maximize").addEventListener("click",maximizeSettings);
+  $("settings-drag").addEventListener("dblclick",e=>{if(!e.target.closest("button"))maximizeSettings();});
+  function startSettingsGesture(event,kind){
+    if(event.button!==0||kind==="move"&&event.target.closest("button"))return;
+    event.preventDefault();if(settingsMaximized){settingsMaximized=false;layoutSettings();}
+    settingsGesture={kind,id:event.pointerId,x:event.clientX,y:event.clientY,rect:{...settingsRect}};
+    try{event.currentTarget.setPointerCapture(event.pointerId);}catch{}
+  }
+  $("settings-drag").addEventListener("pointerdown",e=>startSettingsGesture(e,"move"));
+  $("settings-resize").addEventListener("pointerdown",e=>startSettingsGesture(e,"resize"));
+  window.addEventListener("pointermove",e=>{const g=settingsGesture;if(!g||g.id!==e.pointerId)return;const dx=e.clientX-g.x,dy=e.clientY-g.y;
+    settingsRect=g.kind==="move"?{...g.rect,x:g.rect.x+dx,y:g.rect.y+dy}:{...g.rect,width:g.rect.width+dx,height:g.rect.height+dy};layoutSettings();
+  });
+  function finishSettingsGesture(){if(settingsGesture){settingsGesture=null;saveSettingsRect();}}
+  window.addEventListener("pointerup",finishSettingsGesture);window.addEventListener("pointercancel",finishSettingsGesture);
+  for(const [id,kind] of [["settings-drag","move"],["settings-resize","resize"]])$(id).addEventListener("keydown",e=>{if(e.target!==e.currentTarget||!["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key))return;e.preventDefault();settingsMaximized=false;const d=e.shiftKey?32:8,x=e.key==="ArrowLeft"?-d:e.key==="ArrowRight"?d:0,y=e.key==="ArrowUp"?-d:e.key==="ArrowDown"?d:0;
+    if(kind==="move"){settingsRect.x+=x;settingsRect.y+=y;}else{settingsRect.width+=x;settingsRect.height+=y;}layoutSettings();saveSettingsRect();});
+  window.addEventListener("resize",layoutSettings);
   settingsToggle.addEventListener("click", () => toggleSettings(settingsPanel.hidden));
   $("settings-close").addEventListener("click", () => toggleSettings(false));
   document.addEventListener("keydown", event => { if (event.key === "Escape" && !settingsPanel.hidden) toggleSettings(false); });
@@ -646,6 +734,22 @@
   });
   document.addEventListener("fullscreenchange", () => { $("fullscreen-button").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen"; setTimeout(fitCanvas, 0); }); window.addEventListener("resize", fitCanvas);
 
+  function taxiConfiguration(){return {fleet:Number($("taxi-fleet").value),orders_per_minute:Number($("taxi-demand").value),algorithm:$("taxi-algorithm").value,seed:Number($("taxi-seed").value),dispatch_interval_s:Number($("taxi-interval").value),max_wait_s:600,dwell_s:4,parameters:JSON.parse($("taxi-parameters").value||"{}")};}
+  async function applyMode(){try{const mode=$("simulation-mode").value;await control("set_mode",{mode,taxi:mode==="taxi"?taxiConfiguration():{}});}catch(error){$("taxi-error").textContent=error.message;}}
+  for(const id of ["taxi-fleet","taxi-demand"]){
+    $(id+"-range").addEventListener("input",()=>{$(id).value=$(id+"-range").value;$("taxi-load-feedback").textContent="Ready to apply";});
+    $(id).addEventListener("input",()=>{$(id+"-range").value=$(id).value;$("taxi-load-feedback").textContent="Ready to apply";});
+  }
+  $("taxi-load-apply").addEventListener("click",async()=>{
+    if(!$("taxi-fleet").reportValidity()||!$("taxi-demand").reportValidity())return;
+    const button=$("taxi-load-apply");button.disabled=true;
+    try{const snapshot=await control("set_taxi_load",{taxi:{fleet:Number($("taxi-fleet").value),orders_per_minute:Number($("taxi-demand").value)}});
+      $("taxi-load-feedback").textContent=snapshot?"Applied · active trips continue":"Could not apply changes";
+    }finally{button.disabled=false;}
+  });
+  $("simulation-mode").addEventListener("change",applyMode);$("taxi-apply").addEventListener("click",applyMode);
+  $("taxi-export").addEventListener("click",()=>{const data={schema_version:1,city:state.city,snapshot:state.snapshot},url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));const a=document.createElement("a");a.href=url;a.download="taxi-run.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+  fetch("/api/dispatch/algorithms").then(r=>r.json()).then(items=>{$("taxi-algorithm").replaceChildren(...items.map(item=>{const o=document.createElement("option");o.value=item.id;o.textContent=item.name;return o;}));$("taxi-algorithm").value="nearest";}).catch(error=>{$("taxi-error").textContent=error.message;});
   loadPresets();
   const events = new EventSource("/api/stream"); events.addEventListener("open", () => setConnection("live", "Live model connected")); events.addEventListener("city", (event) => updateCity(JSON.parse(event.data))); events.addEventListener("snapshot", (event) => updateSnapshot(JSON.parse(event.data))); events.addEventListener("error", () => setConnection("error", "Reconnecting to model"));
 })();

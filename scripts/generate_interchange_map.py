@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 base = json.loads((ROOT/'configs/meridian-city.json').read_text(encoding='utf-8'))
 city = {k:v for k,v in base.items() if k not in ('intersections','ways')}
-city.update(name='Four-Cell Interchange Network', description='Central diamond and four three-arm folded diamonds; ramps connect separate bridge and ground nodes.', bounds=dict(min_x=0,min_y=0,max_x=6000,max_y=6000), intersections=[], ways=[])
+city.update(name='Four-Cell Interchange Network', description='Central cloverleaf and four trumpet interchanges.', bounds=dict(min_x=0,min_y=0,max_x=6000,max_y=6000), intersections=[], ways=[])
 city['simulation'] = dict(base['simulation'], people=320, intersection_radius=20, max_people=10000)
 nodes={}
 def node(id,x,y,layer=0,group='',flow=False):
@@ -36,7 +36,7 @@ connect(N['S'],C['N']);connect(C['S'],S['S'])
 connect(W['S'],C['W']);connect(C['E'],E['S'])
 compile_flow_connections(city)
 city['description']='Four-cell network with a central C/D cloverleaf and four peripheral trumpet interchanges.'
-city['world_units_per_km']=1000
+city['world_units_per_km']=profile['world_units_per_km']
 out=ROOT/'configs/presets/four-cell-interchanges.json'
 out.write_text(json.dumps(city,indent=2)+'\n',encoding='utf-8')
 print(f'{out}: {len(nodes)} nodes, {len(city["ways"])} directed ways')

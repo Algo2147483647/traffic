@@ -148,6 +148,19 @@ func (s *Simulation) routeLaneTarget(person *personState, way *model.Way) (lane 
 	nextWayID := person.route[person.routeIndex+1]
 	control := s.graph.Intersections[way.To].TrafficControl
 	available := movementLanes(control, way.ID, nextWayID)
+	// Prepare for the receiving road's next movement before entering a short link.
+	// This prevents permanent waits at green flow nodes with lane-count changes.
+	viable := make([]int, 0, len(available))
+	for _, fromLane := range available {
+		movement, ok := control.Movement(way.ID, nextWayID, fromLane)
+		if ok && len(s.routeCompatibleReceivingLanes(person, s.graph.Ways[nextWayID], person.routeIndex+1, movement.TargetLanes(fromLane))) > 0 {
+			viable = append(viable, fromLane)
+		}
+	}
+	if len(viable) > 0 {
+		available = viable
+	}
+
 	if len(available) == 0 {
 		return person.lane, math.Max(0, s.stopLine(way)-person.along), false
 	}

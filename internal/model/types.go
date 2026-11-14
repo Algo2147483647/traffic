@@ -172,15 +172,16 @@ type Interchange struct {
 }
 
 type CityConfig struct {
-	Interchanges  []Interchange        `json:"interchanges,omitempty"`
-	Name          string               `json:"name"`
-	Description   string               `json:"description"`
-	DrivingSide   string               `json:"driving_side"`
-	MovementRules MovementRulesConfig  `json:"movement_rules"`
-	Bounds        Bounds               `json:"bounds"`
-	Simulation    SimulationConfig     `json:"simulation"`
-	Intersections []IntersectionConfig `json:"intersections"`
-	Ways          []WayConfig          `json:"ways"`
+	WorldUnitsPerKM float64              `json:"world_units_per_km"`
+	Interchanges    []Interchange        `json:"interchanges,omitempty"`
+	Name            string               `json:"name"`
+	Description     string               `json:"description"`
+	DrivingSide     string               `json:"driving_side"`
+	MovementRules   MovementRulesConfig  `json:"movement_rules"`
+	Bounds          Bounds               `json:"bounds"`
+	Simulation      SimulationConfig     `json:"simulation"`
+	Intersections   []IntersectionConfig `json:"intersections"`
+	Ways            []WayConfig          `json:"ways"`
 }
 
 func LoadConfig(path string) (CityConfig, error) {
@@ -286,16 +287,17 @@ type Edge struct {
 }
 
 type Graph struct {
-	Interchanges  []Interchange            `json:"interchanges,omitempty"`
-	Name          string                   `json:"name"`
-	Description   string                   `json:"description"`
-	DrivingSide   string                   `json:"driving_side"`
-	MovementRules MovementRulesConfig      `json:"movement_rules"`
-	Bounds        Bounds                   `json:"bounds"`
-	Simulation    SimulationConfig         `json:"simulation"`
-	Intersections map[string]*Intersection `json:"intersections"`
-	Ways          map[string]*Way          `json:"ways"`
-	Edges         []Edge                   `json:"edges"`
-	Outgoing      map[string][]*Way        `json:"-"`
-	Incoming      map[string][]*Way        `json:"-"`
+	WorldUnitsPerKM float64                  `json:"world_units_per_km"`
+	Interchanges    []Interchange            `json:"interchanges,omitempty"`
+	Name            string                   `json:"name"`
+	Description     string                   `json:"description"`
+	DrivingSide     string                   `json:"driving_side"`
+	MovementRules   MovementRulesConfig      `json:"movement_rules"`
+	Bounds          Bounds                   `json:"bounds"`
+	Simulation      SimulationConfig         `json:"simulation"`
+	Intersections   map[string]*Intersection `json:"intersections"`
+	Ways            map[string]*Way          `json:"ways"`
+	Edges           []Edge                   `json:"edges"`
+	Outgoing        map[string][]*Way        `json:"-"`
+	Incoming        map[string][]*Way        `json:"-"`
 }

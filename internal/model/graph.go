@@ -14,6 +14,12 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 	if cfg.Bounds.MaxX <= cfg.Bounds.MinX || cfg.Bounds.MaxY <= cfg.Bounds.MinY {
 		return nil, fmt.Errorf("city bounds are invalid")
 	}
+	if cfg.WorldUnitsPerKM == 0 {
+		cfg.WorldUnitsPerKM = 1000
+	}
+	if cfg.WorldUnitsPerKM < 0 || math.IsNaN(cfg.WorldUnitsPerKM) || math.IsInf(cfg.WorldUnitsPerKM, 0) {
+		return nil, fmt.Errorf("world_units_per_km must be positive and finite")
+	}
 	cfg.DrivingSide = strings.ToLower(strings.TrimSpace(cfg.DrivingSide))
 	if cfg.DrivingSide == "" {
 		cfg.DrivingSide = DrivingSideRight
@@ -25,17 +31,18 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 	applySimulationDefaults(&cfg.Simulation)
 
 	graph := &Graph{
-		Interchanges:  cfg.Interchanges,
-		Name:          cfg.Name,
-		Description:   cfg.Description,
-		DrivingSide:   cfg.DrivingSide,
-		MovementRules: cfg.MovementRules,
-		Bounds:        cfg.Bounds,
-		Simulation:    cfg.Simulation,
-		Intersections: make(map[string]*Intersection, len(cfg.Intersections)),
-		Ways:          make(map[string]*Way, len(cfg.Ways)),
-		Outgoing:      make(map[string][]*Way),
-		Incoming:      make(map[string][]*Way),
+		WorldUnitsPerKM: cfg.WorldUnitsPerKM,
+		Interchanges:    cfg.Interchanges,
+		Name:            cfg.Name,
+		Description:     cfg.Description,
+		DrivingSide:     cfg.DrivingSide,
+		MovementRules:   cfg.MovementRules,
+		Bounds:          cfg.Bounds,
+		Simulation:      cfg.Simulation,
+		Intersections:   make(map[string]*Intersection, len(cfg.Intersections)),
+		Ways:            make(map[string]*Way, len(cfg.Ways)),
+		Outgoing:        make(map[string][]*Way),
+		Incoming:        make(map[string][]*Way),
 	}
 
 	trafficInputs := make(map[string]TrafficControlConfig, len(cfg.Intersections))

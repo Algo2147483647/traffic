@@ -23,12 +23,12 @@
     {
       "type": "diamond",
       "arms": 4,
-      "implemented": true
+      "implemented": false
     },
     {
       "type": "folded_diamond",
       "arms": 3,
-      "implemented": true
+      "implemented": false
     },
     {
       "type": "cloverleaf",
@@ -69,5 +69,6 @@
     "mainline_portal": 900,
     "branch_station": 360,
     "branch_portal": 520
-  }
+  },
+  "world_units_per_km": 1000
 }

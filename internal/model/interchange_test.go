@@ -37,7 +37,7 @@ func TestFourCellInterchanges(t *testing.T) {
 		}
 		if w.Structure == "ramp" {
 			ramps++
-			if math.Abs(w.StartElevation-w.EndElevation) != 24 {
+			if d := math.Abs(w.StartElevation - w.EndElevation); d != 24 && !(d == 0 && w.Role == "right_ramp") {
 				t.Fatal("invalid ramp")
 			}
 		}
@@ -66,5 +66,59 @@ func TestElevationRequiresRamp(t *testing.T) {
 	c.Ways[0].Structure = "ground"
 	if _, err = BuildGraph(c); err == nil {
 		t.Fatal("height transition accepted without ramp")
+	}
+}
+
+func TestTrumpetTopology(t *testing.T) {
+	c, e := LoadConfig("../../configs/presets/four-cell-interchanges.json")
+	if e != nil {
+		t.Fatal(e)
+	}
+	g, e := BuildGraph(c)
+	if e != nil {
+		t.Fatal(e)
+	}
+	count := 0
+	for _, group := range g.Interchanges {
+		if group.Type != "trumpet" {
+			continue
+		}
+		count++
+		if len(group.Routes) != 6 {
+			t.Fatal("trumpet needs six movements", group.ID)
+		}
+		roles := map[string]int{}
+		for _, w := range g.Ways {
+			if g.Intersections[w.From].Interchange == group.ID && g.Intersections[w.To].Interchange == group.ID {
+				roles[w.Role]++
+			}
+		}
+		if roles["loop_ramp"] != 1 || roles["semi_direct_ramp"] != 1 || roles["right_ramp"] != 2 {
+			t.Fatal("invalid trumpet", group.ID, roles)
+		}
+		for _, r := range group.Routes {
+			for i, id := range r.WayIDs {
+				w := g.Ways[id]
+				if i > 0 {
+					a := g.Ways[r.WayIDs[i-1]]
+					if a.To != w.From {
+						t.Fatal("broken route", group.ID)
+					}
+					if g.Intersections[w.From].TrafficControl.Mode != "flow" {
+						t.Fatal("signal in trumpet", group.ID)
+					}
+				}
+			}
+		}
+	}
+	if count != 4 {
+		t.Fatal("expected four trumpets", count)
+	}
+	if g.WorldUnitsPerKM != 1000 {
+		t.Fatal("missing map scale")
+	}
+	c.WorldUnitsPerKM = -1
+	if _, e = BuildGraph(c); e == nil {
+		t.Fatal("invalid map scale accepted")
 	}
 }

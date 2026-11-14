@@ -6,7 +6,7 @@ const readline = require('node:readline');
 async function startBackend({ runtime, configs, onExit = () => {} }) {
   const token = randomBytes(32).toString('hex');
   const child = spawn(path.join(runtime, process.platform === 'win32' ? 'traffic.exe' : 'traffic'), [
-    '-desktop', '-config', path.join(configs, 'meridian-city.json'), '-preset-dir', path.join(configs, 'presets')
+    '-desktop', '-dispatch-dir', path.join(configs, '../experiments/dispatch'), '-config', path.join(configs, 'meridian-city.json'), '-preset-dir', path.join(configs, 'presets')
   ], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, TRAFFIC_DESKTOP_TOKEN: token } });
   let stopping = false;
   let diagnostics = '';

@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"time"
 
+	"traffic/internal/dispatch"
 	"traffic/internal/model"
 	"traffic/internal/server"
 	"traffic/internal/sim"
@@ -31,7 +32,11 @@ func run() error {
 	presetDir := flag.String("preset-dir", "configs/presets", "Additional city presets (empty disables discovery)")
 	addr := flag.String("addr", "127.0.0.1:8080", "HTTP listen address")
 	desktop := flag.Bool("desktop", false, "Private desktop service; exit when parent stdin closes")
+	policyDir := flag.String("dispatch-dir", "experiments/dispatch", "Local experimental policy manifest directory")
 	flag.Parse()
+	if err := dispatch.LoadDirectory(*policyDir); err != nil {
+		return err
+	}
 	token := os.Getenv("TRAFFIC_DESKTOP_TOKEN")
 	if *desktop {
 		if len(token) < 32 {
@@ -73,6 +78,7 @@ func run() error {
 		go func() { _, _ = io.Copy(io.Discard, os.Stdin); cancel() }()
 	}
 	simulation := sim.New(graph)
+	defer simulation.Close()
 	api := server.NewWithPresets(simulation, slog.Default(), "preset-1", presets)
 	defer api.Close()
 	handler := api.Handler()

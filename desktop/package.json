@@ -5,7 +5,9 @@
   "description": "Standalone lane-level city traffic simulator",
   "author": "Traffic Project",
   "main": "main.cjs",
-  "engines": { "node": ">=22.13.0" },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "build": "node scripts/build.cjs",
     "start": "npm run build && electron .",
@@ -23,15 +25,49 @@
     "appId": "local.traffic.meridian",
     "productName": "Meridian Traffic",
     "asar": true,
-    "files": ["main.cjs", "backend.cjs"],
-    "beforePack": "scripts/before-pack.cjs",
-    "directories": { "output": "dist" },
-    "extraResources": [
-      { "from": "runtime/${os}-${arch}", "to": "traffic-runtime" },
-      { "from": "../configs", "to": "configs", "filter": ["**/*.json"] }
+    "files": [
+      "main.cjs",
+      "backend.cjs"
     ],
-    "win": { "target": "nsis", "artifactName": "Meridian-Traffic-${version}-Windows-${arch}.${ext}" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true },
-    "mac": { "target": "dmg", "category": "public.app-category.education", "artifactName": "Meridian-Traffic-${version}-macOS-${arch}.${ext}" }
+    "beforePack": "scripts/before-pack.cjs",
+    "directories": {
+      "output": "dist"
+    },
+    "extraResources": [
+      {
+        "from": "runtime/${os}-${arch}",
+        "to": "traffic-runtime"
+      },
+      {
+        "from": "../configs",
+        "to": "configs",
+        "filter": [
+          "**/*.json"
+        ]
+      },
+      {
+        "from": "../experiments",
+        "to": "experiments",
+        "filter": [
+          "**/*.json",
+          "**/*.py",
+          "**/*.md"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "artifactName": "Meridian-Traffic-${version}-Windows-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.education",
+      "artifactName": "Meridian-Traffic-${version}-macOS-${arch}.${ext}"
+    }
   }
 }

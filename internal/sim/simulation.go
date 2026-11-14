@@ -57,6 +57,8 @@ type Stats struct {
 }
 
 type Snapshot struct {
+	Mode        string             `json:"mode"`
+	Taxi        *TaxiView          `json:"taxi,omitempty"`
 	City        string             `json:"city"`
 	Time        float64            `json:"time"`
 	Tick        uint64             `json:"tick"`
@@ -134,16 +136,17 @@ type SignalState struct {
 }
 
 type CityView struct {
-	Interchanges  []model.Interchange       `json:"interchanges,omitempty"`
-	Name          string                    `json:"name"`
-	Description   string                    `json:"description"`
-	DrivingSide   string                    `json:"driving_side"`
-	MovementRules model.MovementRulesConfig `json:"movement_rules"`
-	Bounds        model.Bounds              `json:"bounds"`
-	Simulation    model.SimulationConfig    `json:"simulation"`
-	Intersections []*model.Intersection     `json:"intersections"`
-	Ways          []*model.Way              `json:"ways"`
-	Edges         []model.Edge              `json:"edges"`
+	WorldUnitsPerKM float64                   `json:"world_units_per_km"`
+	Interchanges    []model.Interchange       `json:"interchanges,omitempty"`
+	Name            string                    `json:"name"`
+	Description     string                    `json:"description"`
+	DrivingSide     string                    `json:"driving_side"`
+	MovementRules   model.MovementRulesConfig `json:"movement_rules"`
+	Bounds          model.Bounds              `json:"bounds"`
+	Simulation      model.SimulationConfig    `json:"simulation"`
+	Intersections   []*model.Intersection     `json:"intersections"`
+	Ways            []*model.Way              `json:"ways"`
+	Edges           []model.Edge              `json:"edges"`
 }
 
 type personState struct {
@@ -190,6 +193,8 @@ type personState struct {
 }
 
 type Simulation struct {
+	taxi           *taxiRuntime
+	taxiEpoch      uint64
 	mu             sync.RWMutex
 	graph          *model.Graph
 	people         []*personState
@@ -238,7 +243,7 @@ func (s *Simulation) City() CityView {
 
 func (s *Simulation) cityLocked() CityView {
 	return CityView{Interchanges: s.graph.Interchanges,
-		Name: s.graph.Name, Description: s.graph.Description, DrivingSide: s.graph.DrivingSide, MovementRules: s.graph.MovementRules, Bounds: s.graph.Bounds,
+		WorldUnitsPerKM: s.graph.WorldUnitsPerKM, Name: s.graph.Name, Description: s.graph.Description, DrivingSide: s.graph.DrivingSide, MovementRules: s.graph.MovementRules, Bounds: s.graph.Bounds,
 		Simulation: s.graph.Simulation, Intersections: s.graph.SortedIntersections(),
 		Ways: s.graph.SortedWays(), Edges: append([]model.Edge(nil), s.graph.Edges...),
 	}
@@ -307,6 +312,23 @@ func (s *Simulation) Step(dt float64) {
 }
 
 func (s *Simulation) advanceLocked(dt float64) {
+	if s.taxi == nil {
+		s.advanceSubstep(dt)
+		return
+	}
+	for dt > 1e-9 {
+		before := s.time
+		s.advanceSubstep(math.Min(.05, dt))
+		if s.time == before {
+			return
+		}
+		dt -= math.Min(.05, dt)
+	}
+}
+func (s *Simulation) advanceSubstep(dt float64) {
+	if !s.taxiDispatch() {
+		return
+	}
 	queuedAtSignals := 0
 	for _, person := range s.people {
 		if person.state == "waiting" {
@@ -351,6 +373,7 @@ func (s *Simulation) advanceLocked(dt float64) {
 			s.transition(person)
 		}
 	}
+	s.taxiMaintenance(dt)
 	s.tick++
 }
 
@@ -560,6 +583,9 @@ func (s *Simulation) stopLine(way *model.Way) float64 {
 }
 
 func (s *Simulation) exitLane(person *personState) {
+	if s.taxiArrive(person) {
+		return
+	}
 	way := s.graph.Ways[person.wayID]
 	person.position, person.heading = way.SampleLane(person.destinationAlong, person.lanePosition)
 	person.exitPoint = person.position
@@ -582,6 +608,12 @@ func (s *Simulation) Reset(population int) {
 }
 
 func (s *Simulation) resetLocked(population int) {
+	var taxiConfig *TaxiConfig
+	if s.taxi != nil {
+		c := s.taxi.config
+		taxiConfig = &c
+	}
+	s.clearTaxi()
 	s.people = make([]*personState, 0, population)
 	s.time, s.tick, s.nextID, s.spawnRemainder = 0, 0, 1, 0
 	s.vehicleDelay, s.signalDelay, s.releasedDelay = 0, 0, 0
@@ -594,6 +626,9 @@ func (s *Simulation) resetLocked(population int) {
 	// Populate deterministic next-phase and pressure diagnostics immediately;
 	// callers should not need to advance time before the first snapshot.
 	s.updateSignalsLocked(0)
+	if taxiConfig != nil && len(s.taxiStops()) >= 2 {
+		s.startTaxi(*taxiConfig)
+	}
 }
 
 func (s *Simulation) spawnLocked(dt float64) {
@@ -618,6 +653,9 @@ func (s *Simulation) spawnLocked(dt float64) {
 func (s *Simulation) SetLoad(population int, spawnRate float64, maxPopulation int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.taxi != nil {
+		return
+	}
 	if maxPopulation > 0 {
 		s.maxPeople = maxPopulation
 	}
@@ -865,6 +903,11 @@ func (s *Simulation) Snapshot() Snapshot {
 		MeanSignalDelay: meanSignalDelay, SignalStops: s.signalStops, SignalReleases: s.signalReleases,
 		CompletedTrips: s.completedTrips, ThroughputPerMinute: throughput,
 		CurrentSignalQueue: currentQueue, MaximumSignalQueue: s.maxSignalQueue,
+	}
+	snapshot.Mode = "traffic"
+	if s.taxi != nil {
+		snapshot.Mode = "taxi"
+		snapshot.Taxi = s.taxiView()
 	}
 	return snapshot
 }
