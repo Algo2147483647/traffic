@@ -7,6 +7,8 @@ import (
 func TestTaxiSustainedService(t *testing.T) {
 	s := New(taxiGraph(t))
 	c := DefaultTaxiConfig()
+	// Fixed stress workload, independent of interactive defaults.
+	c.Fleet, c.Demand, c.Dwell = 16, 8, 4
 	// Preserve offered trips per free-flow journey after km/h-to-m/s calibration.
 	c.Demand /= 3.6
 	c.MaxWait *= 3.6

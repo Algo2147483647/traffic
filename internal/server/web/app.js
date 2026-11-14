@@ -489,10 +489,10 @@
     state.compute = { tick: null, measuredAt: performance.now(), hz: null };
     const targetHz = 1000 / Math.max(1, Number(city.simulation.tick_ms || 50));
     $("compute-rate").textContent = `${targetHz.toFixed(1)} Hz`;
-    $("population-control").max = 10000;
+    $("population-control").max = 2000;
     $("population-control").value = city.simulation.people; $("population-value").textContent = city.simulation.people;
-    $("spawn-rate-control").value = city.simulation.spawn_rate_per_second || 0; $("spawn-rate-value").textContent = `${Number(city.simulation.spawn_rate_per_second || 0).toFixed(1)}/s`;
-    $("max-population-control").max = 10000;
+    $("spawn-rate-control").value = (city.simulation.spawn_rate_per_second || 0)*60; $("spawn-rate-value").textContent = `${Number((city.simulation.spawn_rate_per_second || 0)*60).toFixed(0)}/min`;
+    $("max-population-control").max = 2000;
     $("max-population-control").value = city.simulation.max_people; $("max-population-value").textContent = city.simulation.max_people;
     $("safe-gap-control").value = city.simulation.safe_gap; $("safe-gap-value").textContent = `${city.simulation.safe_gap} m`;
     fitCanvas();
@@ -732,17 +732,17 @@
   $("map-preset").addEventListener("change", (event) => switchPreset(event.target.value));
   $("zoom-in-button").addEventListener("click", () => zoomAt(1.5, state.transform.width / 2, state.transform.height / 2)); $("zoom-out-button").addEventListener("click", () => zoomAt(1 / 1.5, state.transform.width / 2, state.transform.height / 2)); $("fit-button").addEventListener("click", resetView);
   $("fullscreen-button").addEventListener("click", async () => { if (document.fullscreenElement) await document.exitFullscreen(); else await dashboard.requestFullscreen(); });
-  const loadControls = [["population-control","population-value",(value) => value],["spawn-rate-control","spawn-rate-value",(value) => `${Number(value).toFixed(1)}/s`],["max-population-control","max-population-value",(value) => value]];
+  const loadControls = [["population-control","population-value",(value) => value],["spawn-rate-control","spawn-rate-value",(value) => `${Number(value).toFixed(0)}/min`],["max-population-control","max-population-value",(value) => value]];
   loadControls.forEach(([controlID, valueID, format]) => $(controlID).addEventListener("input", (event) => { $(valueID).textContent = format(event.target.value); }));
   $("safe-gap-control").addEventListener("input",(event)=>{const safeGap=Number(event.target.value);$("safe-gap-value").textContent=`${safeGap} m`;control("set_spacing",{safe_gap:safeGap});});
   $("apply-load-button").addEventListener("click", () => {
-    const population = Number($("population-control").value), spawnRate = Number($("spawn-rate-control").value), maxPopulation = Math.max(population, Number($("max-population-control").value));
+    const population = Number($("population-control").value), spawnRate = Number($("spawn-rate-control").value)/60, maxPopulation = Math.max(population, Number($("max-population-control").value));
     $("max-population-control").value = maxPopulation; $("max-population-value").textContent = maxPopulation;
     control("set_load", { population, spawn_rate_per_second: spawnRate, max_population: maxPopulation });
   });
   document.addEventListener("fullscreenchange", () => { $("fullscreen-button").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen"; setTimeout(fitCanvas, 0); }); window.addEventListener("resize", fitCanvas);
 
-  function taxiConfiguration(){return {fleet:Number($("taxi-fleet").value),orders_per_minute:Number($("taxi-demand").value),algorithm:$("taxi-algorithm").value,seed:Number($("taxi-seed").value),dispatch_interval_s:Number($("taxi-interval").value),max_wait_s:600,dwell_s:4,parameters:JSON.parse($("taxi-parameters").value||"{}")};}
+  function taxiConfiguration(){return {fleet:Number($("taxi-fleet").value),orders_per_minute:Number($("taxi-demand").value),algorithm:$("taxi-algorithm").value,seed:Number($("taxi-seed").value),dispatch_interval_s:Number($("taxi-interval").value),max_wait_s:600,dwell_s:20,parameters:JSON.parse($("taxi-parameters").value||"{}")};}
   async function applyMode(){try{const mode=$("simulation-mode").value;await control("set_mode",{mode,taxi:mode==="taxi"?taxiConfiguration():{}});}catch(error){$("taxi-error").textContent=error.message;}}
   for(const id of ["taxi-fleet","taxi-demand"]){
     $(id+"-range").addEventListener("input",()=>{$(id).value=$(id+"-range").value;$("taxi-load-feedback").textContent="Ready to apply";});

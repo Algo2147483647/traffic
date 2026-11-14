@@ -221,3 +221,7 @@ simulator. Train execution, grouped pooling, geographic demand/relocation, compl
 checkpoint restore, persistent macro transfer caching and a GUI experiment-job manager
 remain separate implementations. Their interfaces must retain the no-reassignment
 rule until a versioned grouped-task proposal/validator is explicitly introduced.
+
+## Next delivery stages
+
+The [backend evolution plan](backend-evolution-plan.md) supersedes the earlier backlog order with runnable delivery gates for general workers, mixed demand and metro.

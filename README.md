@@ -448,3 +448,5 @@ for the current capability matrix and implementation order. Settings can hide th
 coordinate rulers and scale using **Show coordinates and scale**.
 
 Physical units and time stepping are documented in [physical-units.md](docs/physical-units.md).
+
+Current defaults and the next backend stages: [backend evolution plan](docs/backend-evolution-plan.md).

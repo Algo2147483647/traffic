@@ -15,11 +15,11 @@
   "simulation": {
     "people": 320,
     "spawn_rate_per_second": 0,
-    "max_people": 10000,
+    "max_people": 1000,
     "tick_ms": 50,
     "walk_speed": 1.4,
     "drive_speed": 26.38888889,
-    "safe_gap": 4,
+    "safe_gap": 2.5,
     "spawn_margin": 20,
     "seed": 20260830,
     "snapshot_fps": 12,

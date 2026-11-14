@@ -6,7 +6,7 @@ import (
 	model "traffic/internal/infrastructure/road"
 )
 
-const stoppedVehicleGap = 2.0
+const stoppedVehicleGap = 2.5
 
 // selectReceivingLane keeps the explicit lane connector valid while using any
 // compatible downstream lane that has enough physical storage. Route preference

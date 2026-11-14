@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 base = json.loads((ROOT/'configs/meridian-city.json').read_text(encoding='utf-8'))
 city = {k:v for k,v in base.items() if k not in ('intersections','ways')}
 city.update(name='Four-Cell Interchange Network', description='Central cloverleaf and four trumpet interchanges.', bounds=dict(min_x=0,min_y=0,max_x=6000,max_y=6000), intersections=[], ways=[])
-city['simulation'] = dict(base['simulation'], people=320, intersection_radius=20, max_people=10000)
+city['simulation'] = dict(base['simulation'], people=320, intersection_radius=20, max_people=1000)
 nodes={}
 def node(id,x,y,layer=0,group='',flow=False):
     n=dict(id=id,name=id.replace('_',' '),position=dict(x=x,y=y),layer=layer,elevation=profile['cloverleaf']['deck_height']*layer,interchange=group)

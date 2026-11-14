@@ -52,11 +52,11 @@ func TestCityAndStaticEndpoints(t *testing.T) {
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	html := response.Body.String()
-	if !strings.Contains(html, `<option value="10">10×</option>`) || !strings.Contains(html, `id="safe-gap-control" type="range" min="4" max="80" step="2" value="4"`) ||
+	if !strings.Contains(html, `<option value="10">10×</option>`) || !strings.Contains(html, `id="safe-gap-control" type="range" min="2" max="10" step="0.5" value="2.5"`) ||
 		!strings.Contains(html, `id="map-preset"`) || !strings.Contains(html, `id="compute-rate"`) ||
-		!strings.Contains(html, `id="population-control" type="range" min="20" max="10000"`) ||
-		!strings.Contains(html, `id="max-population-control" type="range" min="100" max="10000"`) {
-		t.Fatal("dashboard does not expose map presets, 10x rate, 4m spacing, 10,000 people, and compute frequency")
+		!strings.Contains(html, `id="population-control" type="range" min="20" max="2000"`) ||
+		!strings.Contains(html, `id="max-population-control" type="range" min="100" max="2000"`) {
+		t.Fatal("dashboard does not expose map presets, 10x rate, 2.5m spacing, 2,000 people, and compute frequency")
 	}
 	request = httptest.NewRequest(http.MethodGet, "/app.js", nil)
 	response = httptest.NewRecorder()

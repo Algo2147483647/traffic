@@ -115,15 +115,15 @@ func TestBuildGraphRejectsUnknownIntersection(t *testing.T) {
 	}
 }
 
-func TestDefaultVehicleSpacingIsFourMeters(t *testing.T) {
+func TestDefaultVehicleSpacingIsTwoPointFiveMeters(t *testing.T) {
 	cfg := testConfig()
 	cfg.Simulation.SafeGap = 0
 	graph, err := BuildGraph(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if graph.Simulation.SafeGap != 4 {
-		t.Fatalf("default safe gap = %v, want 4", graph.Simulation.SafeGap)
+	if graph.Simulation.SafeGap != 2.5 {
+		t.Fatalf("default safe gap = %v, want 2.5", graph.Simulation.SafeGap)
 	}
 }
 

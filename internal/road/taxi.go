@@ -79,7 +79,7 @@ type taxiRuntime struct {
 }
 
 func DefaultTaxiConfig() TaxiConfig {
-	return TaxiConfig{Fleet: 16, Demand: 8, Algorithm: "nearest", Seed: 71429, MaxWait: 600, Dwell: 4, Interval: 2}
+	return TaxiConfig{Fleet: 32, Demand: 2, Algorithm: "nearest", Seed: 71429, MaxWait: 600, Dwell: 20, Interval: 2}
 }
 func normalizeTaxi(c TaxiConfig) (TaxiConfig, error) {
 	if c.Algorithm == "" {
@@ -89,7 +89,7 @@ func normalizeTaxi(c TaxiConfig) (TaxiConfig, error) {
 		c.MaxWait = 600
 	}
 	if c.Dwell == 0 {
-		c.Dwell = 4
+		c.Dwell = 20
 	}
 	if c.Interval == 0 {
 		c.Interval = 2

@@ -38,6 +38,16 @@ async function createWindow() {
       if (preset) { await control({action:'set_preset',preset_id:preset}); await wait(800); }
       document.querySelector('#settings-toggle').click();
       if (document.querySelector('#settings-panel').hidden) throw Error('Settings did not open');
+      await control({action:'pause'});
+      const spawn=document.querySelector('#spawn-rate-control'),gap=document.querySelector('#safe-gap-control');
+      if(gap.value!=='2.5'||gap.max!=='10'||document.querySelector('#taxi-fleet').value!=='32'||document.querySelector('#taxi-demand').value!=='2')throw Error('Settings defaults not calibrated');
+      spawn.value='30';spawn.dispatchEvent(new Event('input'));document.querySelector('#apply-load-button').click();
+      for(let i=0;i<50&&(await get('/api/snapshot')).load.spawn_rate_per_second!==0.5;i++)await wait(50);
+      if((await get('/api/snapshot')).load.spawn_rate_per_second!==0.5)throw Error('Per-minute demand conversion failed');
+      spawn.value='0';spawn.dispatchEvent(new Event('input'));document.querySelector('#apply-load-button').click();
+      for(let i=0;i<50&&(await get('/api/snapshot')).load.spawn_rate_per_second!==0;i++)await wait(50);
+      if((await get('/api/snapshot')).load.spawn_rate_per_second!==0)throw Error('Demand reset failed');
+
       const panel=document.querySelector('#settings-panel'),initial=panel.getBoundingClientRect();
       const drag=document.querySelector('#settings-drag');
       drag.dispatchEvent(new PointerEvent('pointerdown',{pointerId:41,button:0,clientX:initial.left+60,clientY:initial.top+20,bubbles:true}));

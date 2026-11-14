@@ -33,10 +33,10 @@
       <section id="taxi-settings" hidden>
         <div class="settings-section-heading"><h3>Taxi service</h3><span id="taxi-fleet-status"></span></div>
         <div class="taxi-live-fields">
-          <label for="taxi-fleet">Drivers</label><input id="taxi-fleet" type="number" min="1" max="200" step="1" value="16" aria-label="Driver count">
-          <input id="taxi-fleet-range" type="range" min="1" max="200" step="1" value="16" aria-label="Driver count slider">
-          <label for="taxi-demand">Orders per minute</label><input id="taxi-demand" type="number" min="0" max="60" step="0.5" value="8" aria-label="Order frequency">
-          <input id="taxi-demand-range" type="range" min="0" max="60" step="0.5" value="8" aria-label="Order frequency slider">
+          <label for="taxi-fleet">Drivers</label><input id="taxi-fleet" type="number" min="1" max="200" step="1" value="32" aria-label="Driver count">
+          <input id="taxi-fleet-range" type="range" min="1" max="200" step="1" value="32" aria-label="Driver count slider">
+          <label for="taxi-demand">Orders per minute</label><input id="taxi-demand" type="number" min="0" max="60" step="0.5" value="2" aria-label="Order frequency">
+          <input id="taxi-demand-range" type="range" min="0" max="60" step="0.5" value="2" aria-label="Order frequency slider">
         </div>
         <button id="taxi-load-apply" class="apply-load">Apply live</button><p id="taxi-load-feedback" role="status"></p>
         <details class="taxi-advanced"><summary>Dispatch &amp; experiment</summary>
@@ -48,11 +48,11 @@
         <p id="taxi-error" role="status"></p>
       </section>
       <section id="traffic-settings" class="glass load-overlay">
-        <div class="panel-heading"><div><h2>Population density</h2></div><span id="load-current">—</span></div>
-        <label class="range-control"><span>Active population <b id="population-value">240</b></span><input id="population-control" type="range" min="20" max="10000" step="20" value="240"></label>
-        <label class="range-control"><span>Spawn rate <b id="spawn-rate-value">1.5/s</b></span><input id="spawn-rate-control" type="range" min="0" max="20" step="0.5" value="1.5"></label>
-        <label class="range-control"><span>Population cap <b id="max-population-value">900</b></span><input id="max-population-control" type="range" min="100" max="10000" step="100" value="900"></label>
-        <label class="range-control"><span>Vehicle spacing <b id="safe-gap-value">4 m</b></span><input id="safe-gap-control" type="range" min="4" max="80" step="2" value="4"></label>
+        <div class="panel-heading"><div><h2>Traffic demand</h2></div><span id="load-current">—</span></div>
+        <label class="range-control"><span>Active people <b id="population-value">320</b></span><input id="population-control" type="range" min="20" max="2000" step="20" value="320"></label>
+        <label class="range-control"><span>New people / min <b id="spawn-rate-value">0/min</b></span><input id="spawn-rate-control" type="range" min="0" max="60" step="1" value="0"></label>
+        <label class="range-control"><span>People limit <b id="max-population-value">1000</b></span><input id="max-population-control" type="range" min="100" max="2000" step="100" value="1000"></label>
+        <label class="range-control"><span>Following clearance <b id="safe-gap-value">2.5 m</b></span><input id="safe-gap-control" type="range" min="2" max="10" step="0.5" value="2.5"></label>
         <button id="apply-load-button" type="button" class="apply-load">Apply traffic load</button>
       </section>
       <div class="settings-status"><div class="connection" role="status" aria-live="polite"><span class="connection-dot"></span><span id="connection-label">Connecting</span></div><div class="frequency-block" title="Measured simulation updates per second"><strong id="compute-rate">— Hz</strong></div></div>
