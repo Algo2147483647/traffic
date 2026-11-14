@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"math"
 	"time"
-	"traffic/internal/model"
-	"traffic/internal/sim"
+	model "traffic/internal/infrastructure/road"
+	sim "traffic/internal/road"
 )
 
 type Result struct {

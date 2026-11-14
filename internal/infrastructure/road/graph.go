@@ -8,6 +8,15 @@ import (
 )
 
 func BuildGraph(cfg CityConfig) (*Graph, error) {
+	for _, id := range []string{cfg.GeometryAlgorithm, cfg.PhaseAlgorithm} {
+		if id != "" {
+			var err error
+			cfg, err = applyPlanner(id, cfg)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	if cfg.Name == "" {
 		return nil, fmt.Errorf("city name is required")
 	}

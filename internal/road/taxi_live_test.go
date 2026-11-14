@@ -12,7 +12,7 @@ func TestTaxiLiveLoadPreservesTrips(t *testing.T) {
 	c.Demand = 2
 	_ = s.SetMode("taxi", c)
 	s.Step(.05)
-	beforeTime, created := s.time, s.taxi.created
+	beforeTime, created := s.clock.Time, s.taxi.created
 	positions := map[int]float64{}
 	orders := map[int]int{}
 	for _, v := range s.taxi.vehicles {
@@ -22,7 +22,7 @@ func TestTaxiLiveLoadPreservesTrips(t *testing.T) {
 	if err := s.SetTaxiLoad(9, 0); err != nil {
 		t.Fatal(err)
 	}
-	if s.time != beforeTime || s.taxi.created != created || len(s.taxi.vehicles) != 9 || !math.IsInf(s.taxi.nextArrival, 1) {
+	if s.clock.Time != beforeTime || s.taxi.created != created || len(s.taxi.vehicles) != 9 || !math.IsInf(s.taxi.nextArrival, 1) {
 		t.Fatal("live load reset state or did not apply")
 	}
 	for _, v := range s.taxi.vehicles {

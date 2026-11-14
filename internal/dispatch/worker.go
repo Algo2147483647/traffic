@@ -48,7 +48,7 @@ func LoadDirectory(dir string) error {
 		if m.Name == "" {
 			m.Name = m.ID
 		}
-		if e = Register(Metadata{m.ID, m.Name, "process"}, func() Policy { return &worker{m} }); e != nil {
+		if e = Register(Metadata{ID: m.ID, Name: m.Name, Kind: "process"}, func() Policy { return &worker{m} }); e != nil {
 			return e
 		}
 	}

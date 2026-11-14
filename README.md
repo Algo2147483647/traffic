@@ -421,8 +421,8 @@ cmd/traffic-bench/           seeded fixed-time/adaptive A/B benchmark
 cmd/traffic-observe/         real-time congestion observer and JSON report
 configs/                     primary JSON city input
 configs/presets/             auto-discovered JSON map presets
-internal/model/              graph, intersection, segment, and matrix model
-internal/sim/                spawning, walking, driving, queuing, snapshots
+internal/infrastructure/road/              graph, intersection, segment, and matrix model
+internal/road/                spawning, walking, driving, queuing, snapshots
 internal/server/             HTTP/SSE API and embedded HTML UI
 internal/server/web/         standalone HTML, CSS, and canvas renderer
 app/                         publishable visualization surface
@@ -431,3 +431,14 @@ app/                         publishable visualization surface
 ## Taxi mode and experimental dispatch
 
 Settings > MODE switches between Traffic and Taxi. Taxi supports persistent vehicles, pickup/dropoff, six native assignment policies and local experimental Python/executable workers. See [implementation and operation](docs/taxi-implementation.md), [experimental extension guide](experiments/dispatch/README.md), and the [architecture target](docs/taxi-integration-design.md).
+
+## Backend architecture
+
+See [module ownership, refactoring plan and algorithm extension contracts](docs/backend-architecture.md).
+
+### Hierarchical interchange routing
+
+The road and taxi engines now search directional interchange macro nodes and expand
+each selected transfer into actual roads with explicit entry/exit lanes. Pickup,
+delivery, cruising and congestion rerouting use the same planner. See
+[the routing contract and verification](docs/hierarchical-routing.md).

@@ -15,8 +15,8 @@ import (
 	"strings"
 	"traffic/internal/dispatch"
 	"traffic/internal/experiments"
-	"traffic/internal/model"
-	"traffic/internal/sim"
+	model "traffic/internal/infrastructure/road"
+	sim "traffic/internal/road"
 )
 
 func main() {

@@ -3,7 +3,7 @@ package sim
 import (
 	"math"
 
-	"traffic/internal/model"
+	model "traffic/internal/infrastructure/road"
 )
 
 const pressureEpsilon = 1e-9

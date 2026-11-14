@@ -51,9 +51,10 @@ type Policy interface {
 }
 type Factory func() Policy
 type Metadata struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Kind string `json:"kind"`
+	Version string `json:"version"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
 }
 
 var mu sync.RWMutex
@@ -65,6 +66,9 @@ var registry = map[string]struct {
 func Register(m Metadata, f Factory) error {
 	mu.Lock()
 	defer mu.Unlock()
+	if m.Version == "" {
+		m.Version = "1"
+	}
 	if m.ID == "" || f == nil {
 		return fmt.Errorf("invalid policy registration")
 	}
@@ -123,7 +127,7 @@ type builtin string
 func init() {
 	for _, id := range []string{"nearest", "fifo", "greedy", "hungarian", "batch", "score"} {
 		id := id
-		_ = Register(Metadata{id, map[string]string{"nearest": "Nearest ETA", "fifo": "FIFO", "greedy": "Global greedy", "hungarian": "Hungarian", "batch": "Batch Hungarian", "score": "Weighted score"}[id], "native"}, func() Policy { return builtin(id) })
+		_ = Register(Metadata{ID: id, Name: map[string]string{"nearest": "Nearest ETA", "fifo": "FIFO", "greedy": "Global greedy", "hungarian": "Hungarian", "batch": "Batch Hungarian", "score": "Weighted score"}[id], Kind: "native"}, func() Policy { return builtin(id) })
 	}
 }
 func (b builtin) Decide(ctx context.Context, in Input) (Proposal, error) {

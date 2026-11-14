@@ -172,16 +172,18 @@ type Interchange struct {
 }
 
 type CityConfig struct {
-	WorldUnitsPerKM float64              `json:"world_units_per_km"`
-	Interchanges    []Interchange        `json:"interchanges,omitempty"`
-	Name            string               `json:"name"`
-	Description     string               `json:"description"`
-	DrivingSide     string               `json:"driving_side"`
-	MovementRules   MovementRulesConfig  `json:"movement_rules"`
-	Bounds          Bounds               `json:"bounds"`
-	Simulation      SimulationConfig     `json:"simulation"`
-	Intersections   []IntersectionConfig `json:"intersections"`
-	Ways            []WayConfig          `json:"ways"`
+	GeometryAlgorithm string               `json:"geometry_algorithm,omitempty"`
+	PhaseAlgorithm    string               `json:"phase_algorithm,omitempty"`
+	WorldUnitsPerKM   float64              `json:"world_units_per_km"`
+	Interchanges      []Interchange        `json:"interchanges,omitempty"`
+	Name              string               `json:"name"`
+	Description       string               `json:"description"`
+	DrivingSide       string               `json:"driving_side"`
+	MovementRules     MovementRulesConfig  `json:"movement_rules"`
+	Bounds            Bounds               `json:"bounds"`
+	Simulation        SimulationConfig     `json:"simulation"`
+	Intersections     []IntersectionConfig `json:"intersections"`
+	Ways              []WayConfig          `json:"ways"`
 }
 
 func LoadConfig(path string) (CityConfig, error) {

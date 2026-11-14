@@ -6,7 +6,7 @@ import (
 )
 
 func TestFourCellInterchanges(t *testing.T) {
-	c, err := LoadConfig("../../configs/presets/four-cell-interchanges.json")
+	c, err := LoadConfig("../../../configs/presets/four-cell-interchanges.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestFourCellInterchanges(t *testing.T) {
 	}
 }
 func TestElevationRequiresRamp(t *testing.T) {
-	c, err := LoadConfig("../../configs/presets/four-cell-interchanges.json")
+	c, err := LoadConfig("../../../configs/presets/four-cell-interchanges.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestElevationRequiresRamp(t *testing.T) {
 }
 
 func TestTrumpetTopology(t *testing.T) {
-	c, e := LoadConfig("../../configs/presets/four-cell-interchanges.json")
+	c, e := LoadConfig("../../../configs/presets/four-cell-interchanges.json")
 	if e != nil {
 		t.Fatal(e)
 	}

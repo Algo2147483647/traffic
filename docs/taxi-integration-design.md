@@ -26,9 +26,9 @@ undirected router. Algorithm code proposes assignments; only the host commits th
 | backend/app/dispatch/{nearest_driver,fifo,greedy,hungarian,batch,score_based}.py | Baseline behavior | Port to Go or run in isolated experimental worker; compare on identical inputs |
 | backend/app/simulation/engine.py | Cancellation, supply changes, relocation, counters | All transitions driven by traffic's actual arrival events |
 | backend/app/simulation/benchmark.py | Seeded scenario comparison | Fixed demand tapes, multiple seeds, resource budgets, failure accounting |
-| traffic/internal/sim/simulation.go | Clock, following, lane changes and turning | Extract shared road-agent movement; attach taxi task completion |
-| traffic/internal/sim/routing.go | Lane-valid route search and occupancy costs | Current-position routing and calibrated time estimates |
-| traffic/internal/model/types.go | Directed roads, elevation, access flags, kilometer scale | Stop and demand-zone definitions |
+| traffic/internal/road/simulation.go | Clock, following, lane changes and turning | Extract shared road-agent movement; attach taxi task completion |
+| traffic/internal/road/routing.go | Lane-valid route search and occupancy costs | Current-position routing and calibrated time estimates |
+| traffic/internal/infrastructure/road/types.go | Directed roads, elevation, access flags, kilometer scale | Stop and demand-zone definitions |
 | traffic/internal/server/server.go and web/ | API, stream, canvas and floating UI | Taxi commands, views, metrics and experiment controls |
 
 Source algorithm names describe implementations, not guaranteed optimal service.

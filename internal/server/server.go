@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"traffic/internal/dispatch"
-	"traffic/internal/model"
-	"traffic/internal/sim"
+	model "traffic/internal/infrastructure/road"
+	sim "traffic/internal/road"
 )
 
 //go:embed web/*
@@ -89,6 +89,10 @@ func newServer(simulation *sim.Simulation, logger *slog.Logger, current string, 
 	server := &Server{simulation: simulation, logger: logger, shutdown: make(chan struct{}), presets: presets, presetList: presetList, current: current}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", server.health)
+	mux.HandleFunc("GET /api/events", func(w http.ResponseWriter, r *http.Request) { server.writeJSON(w, 200, server.simulation.Events()) })
+	mux.HandleFunc("GET /api/algorithms", func(w http.ResponseWriter, r *http.Request) {
+		server.writeJSON(w, 200, map[string]any{"road": sim.PolicyCatalog(), "dispatch": dispatch.List()})
+	})
 	mux.HandleFunc("GET /api/dispatch/algorithms", func(w http.ResponseWriter, r *http.Request) { server.writeJSON(w, 200, dispatch.List()) })
 	mux.HandleFunc("GET /api/city", server.city)
 	mux.HandleFunc("GET /api/presets", server.presetOptions)

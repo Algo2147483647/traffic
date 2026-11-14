@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"traffic/internal/dispatch"
-	"traffic/internal/model"
+	model "traffic/internal/infrastructure/road"
+	sim "traffic/internal/road"
 	"traffic/internal/server"
-	"traffic/internal/sim"
 )
 
 func main() {
@@ -33,7 +33,13 @@ func run() error {
 	addr := flag.String("addr", "127.0.0.1:8080", "HTTP listen address")
 	desktop := flag.Bool("desktop", false, "Private desktop service; exit when parent stdin closes")
 	policyDir := flag.String("dispatch-dir", "experiments/dispatch", "Local experimental policy manifest directory")
+	roadPolicy := flag.String("road-policy", "baseline", "Registered road policy profile")
+	roadParameters := flag.String("road-parameters", "{}", "Numeric policy parameters as JSON")
 	flag.Parse()
+	var policyParameters map[string]float64
+	if err := json.Unmarshal([]byte(*roadParameters), &policyParameters); err != nil {
+		return err
+	}
 	if err := dispatch.LoadDirectory(*policyDir); err != nil {
 		return err
 	}
@@ -77,7 +83,10 @@ func run() error {
 	if *desktop {
 		go func() { _, _ = io.Copy(io.Discard, os.Stdin); cancel() }()
 	}
-	simulation := sim.New(graph)
+	simulation, err := sim.NewWithPolicy(graph, *roadPolicy, policyParameters)
+	if err != nil {
+		return err
+	}
 	defer simulation.Close()
 	api := server.NewWithPresets(simulation, slog.Default(), "preset-1", presets)
 	defer api.Close()

@@ -6,33 +6,37 @@ import (
 	"math/rand"
 	"sync"
 	"time"
+	"traffic/internal/foundation"
+	"traffic/internal/infrastructure/interchange"
 
-	"traffic/internal/model"
+	model "traffic/internal/infrastructure/road"
 )
 
 type Person struct {
-	Structure     string        `json:"structure"`
-	Elevation     float64       `json:"elevation"`
-	ID            int           `json:"id"`
-	State         string        `json:"state"`
-	Position      model.Vec2    `json:"position"`
-	Speed         float64       `json:"speed"`
-	Heading       float64       `json:"heading_degrees"`
-	WayID         string        `json:"way_id,omitempty"`
-	Lane          int           `json:"lane"`
-	LanePosition  float64       `json:"lane_position"`
-	LaneChange    *LaneChange   `json:"lane_change,omitempty"`
-	Along         float64       `json:"along"`
-	Transform     model.Matrix3 `json:"transform"`
-	Reference     Reference     `json:"reference"`
-	WaitingFor    int           `json:"waiting_for,omitempty"`
-	WaitingSignal string        `json:"waiting_signal,omitempty"`
-	WaitingReason string        `json:"waiting_reason,omitempty"`
-	Origin        model.Vec2    `json:"origin"`
-	Destination   model.Vec2    `json:"destination"`
-	Route         []string      `json:"route"`
-	RouteIndex    int           `json:"route_index"`
-	Trip          int           `json:"trip"`
+	Structure       string        `json:"structure"`
+	Elevation       float64       `json:"elevation"`
+	ID              int           `json:"id"`
+	State           string        `json:"state"`
+	Position        model.Vec2    `json:"position"`
+	Speed           float64       `json:"speed"`
+	Heading         float64       `json:"heading_degrees"`
+	WayID           string        `json:"way_id,omitempty"`
+	Lane            int           `json:"lane"`
+	LanePosition    float64       `json:"lane_position"`
+	LaneChange      *LaneChange   `json:"lane_change,omitempty"`
+	Along           float64       `json:"along"`
+	Transform       model.Matrix3 `json:"transform"`
+	Reference       Reference     `json:"reference"`
+	WaitingFor      int           `json:"waiting_for,omitempty"`
+	WaitingSignal   string        `json:"waiting_signal,omitempty"`
+	WaitingReason   string        `json:"waiting_reason,omitempty"`
+	Origin          model.Vec2    `json:"origin"`
+	Destination     model.Vec2    `json:"destination"`
+	Route           []string      `json:"route"`
+	RouteEntryLanes []int         `json:"route_entry_lanes,omitempty"`
+	RouteExitLanes  []int         `json:"route_exit_lanes,omitempty"`
+	RouteIndex      int           `json:"route_index"`
+	Trip            int           `json:"trip"`
 }
 
 type LaneChange struct {
@@ -136,17 +140,18 @@ type SignalState struct {
 }
 
 type CityView struct {
-	WorldUnitsPerKM float64                   `json:"world_units_per_km"`
-	Interchanges    []model.Interchange       `json:"interchanges,omitempty"`
-	Name            string                    `json:"name"`
-	Description     string                    `json:"description"`
-	DrivingSide     string                    `json:"driving_side"`
-	MovementRules   model.MovementRulesConfig `json:"movement_rules"`
-	Bounds          model.Bounds              `json:"bounds"`
-	Simulation      model.SimulationConfig    `json:"simulation"`
-	Intersections   []*model.Intersection     `json:"intersections"`
-	Ways            []*model.Way              `json:"ways"`
-	Edges           []model.Edge              `json:"edges"`
+	MacroInterchanges []interchange.Node        `json:"macro_interchanges,omitempty"`
+	WorldUnitsPerKM   float64                   `json:"world_units_per_km"`
+	Interchanges      []model.Interchange       `json:"interchanges,omitempty"`
+	Name              string                    `json:"name"`
+	Description       string                    `json:"description"`
+	DrivingSide       string                    `json:"driving_side"`
+	MovementRules     model.MovementRulesConfig `json:"movement_rules"`
+	Bounds            model.Bounds              `json:"bounds"`
+	Simulation        model.SimulationConfig    `json:"simulation"`
+	Intersections     []*model.Intersection     `json:"intersections"`
+	Ways              []*model.Way              `json:"ways"`
+	Edges             []model.Edge              `json:"edges"`
 }
 
 type personState struct {
@@ -161,6 +166,7 @@ type personState struct {
 	destinationLane    int
 	route              []string
 	routeLanes         []int
+	routeEntryLanes    []int
 	routeIndex         int
 	wayID              string
 	lane               int
@@ -193,15 +199,15 @@ type personState struct {
 }
 
 type Simulation struct {
+	clock          foundation.Clock
+	journal        foundation.Journal
+	policies       Strategies
 	taxi           *taxiRuntime
 	taxiEpoch      uint64
 	mu             sync.RWMutex
 	graph          *model.Graph
+	router         *interchange.Planner
 	people         []*personState
-	time           float64
-	tick           uint64
-	paused         bool
-	timeScale      float64
 	nextID         int
 	spawnRate      float64
 	maxPeople      int
@@ -229,7 +235,7 @@ func NewFixedTime(graph *model.Graph) *Simulation {
 }
 
 func newSimulation(graph *model.Graph, adaptive bool) *Simulation {
-	s := &Simulation{graph: graph, timeScale: 1,
+	s := &Simulation{graph: graph, router: interchange.NewPlanner(graph), clock: foundation.Clock{Rate: 1},
 		spawnRate: graph.Simulation.SpawnRate, maxPeople: graph.Simulation.MaxPeople, safeGap: graph.Simulation.SafeGap, adaptive: adaptive}
 	s.resetLocked(graph.Simulation.People)
 	return s
@@ -242,7 +248,7 @@ func (s *Simulation) City() CityView {
 }
 
 func (s *Simulation) cityLocked() CityView {
-	return CityView{Interchanges: s.graph.Interchanges,
+	return CityView{MacroInterchanges: interchange.Build(s.graph), Interchanges: s.graph.Interchanges,
 		WorldUnitsPerKM: s.graph.WorldUnitsPerKM, Name: s.graph.Name, Description: s.graph.Description, DrivingSide: s.graph.DrivingSide, MovementRules: s.graph.MovementRules, Bounds: s.graph.Bounds,
 		Simulation: s.graph.Simulation, Intersections: s.graph.SortedIntersections(),
 		Ways: s.graph.SortedWays(), Edges: append([]model.Edge(nil), s.graph.Edges...),
@@ -258,8 +264,9 @@ func (s *Simulation) ReplaceGraph(graph *model.Graph) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.graph = graph
-	s.paused = false
-	s.timeScale = 1
+	s.router = interchange.NewPlanner(graph)
+	s.clock.Paused = false
+	s.clock.Rate = 1
 	s.spawnRate = graph.Simulation.SpawnRate
 	s.maxPeople = graph.Simulation.MaxPeople
 	s.safeGap = graph.Simulation.SafeGap
@@ -285,10 +292,10 @@ func (s *Simulation) Run(ctx context.Context) {
 func (s *Simulation) Tick(dt float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.paused || dt <= 0 || math.IsNaN(dt) || math.IsInf(dt, 0) {
+	if s.clock.Paused || dt <= 0 || math.IsNaN(dt) || math.IsInf(dt, 0) {
 		return
 	}
-	dt *= s.timeScale
+	dt *= s.clock.Rate
 	if math.IsInf(dt, 0) {
 		return
 	}
@@ -304,7 +311,7 @@ func (s *Simulation) Step(dt float64) {
 	if dt <= 0 {
 		dt = float64(s.graph.Simulation.TickMS) / 1000
 	}
-	dt *= s.timeScale
+	dt *= s.clock.Rate
 	if math.IsInf(dt, 0) {
 		return
 	}
@@ -317,9 +324,9 @@ func (s *Simulation) advanceLocked(dt float64) {
 		return
 	}
 	for dt > 1e-9 {
-		before := s.time
+		before := s.clock.Time
 		s.advanceSubstep(math.Min(.05, dt))
-		if s.time == before {
+		if s.clock.Time == before {
 			return
 		}
 		dt -= math.Min(.05, dt)
@@ -349,7 +356,7 @@ func (s *Simulation) advanceSubstep(dt float64) {
 			s.advanceWalking(person, dt)
 		} else if person.state == "turning" {
 			s.advanceTurning(person, dt)
-		} else if person.state == "arrived" && s.time-person.arrivedAt >= s.graph.Simulation.ArrivalDwell {
+		} else if person.state == "arrived" && s.clock.Time-person.arrivedAt >= s.graph.Simulation.ArrivalDwell {
 			s.startTripLocked(person)
 		}
 	}
@@ -358,7 +365,7 @@ func (s *Simulation) advanceSubstep(dt float64) {
 	// Signal runtimes have now advanced through this entire interval. Advance the
 	// shared simulation clock before stop-line decisions so adaptive and fixed
 	// controllers are both queried at the same end-of-step instant.
-	s.time += dt
+	s.clock.Time += dt
 	s.planLaneChangesLocked()
 	s.advanceRoadVehiclesLocked(dt)
 
@@ -374,7 +381,7 @@ func (s *Simulation) advanceSubstep(dt float64) {
 		}
 	}
 	s.taxiMaintenance(dt)
-	s.tick++
+	s.clock.Tick++
 }
 
 func (s *Simulation) advanceWalking(person *personState, dt float64) {
@@ -386,7 +393,7 @@ func (s *Simulation) advanceWalking(person *personState, dt float64) {
 	if distance <= step || distance < 0.001 {
 		person.position = person.walkTarget
 		if person.state == "walking_to_destination" {
-			person.state, person.speed, person.arrivedAt, person.waitingReason = "arrived", 0, s.time, ""
+			person.state, person.speed, person.arrivedAt, person.waitingReason = "arrived", 0, s.clock.Time, ""
 			s.completedTrips++
 			return
 		}
@@ -431,6 +438,9 @@ func (s *Simulation) transition(person *personState) {
 	preferredLane := person.id % next.Lanes
 	if len(person.routeLanes) == len(person.route) {
 		preferredLane = person.routeLanes[nextIndex]
+		if len(person.routeEntryLanes) == len(person.route) {
+			preferredLane = person.routeEntryLanes[nextIndex]
+		}
 	} else if nextIndex+1 < len(person.route) {
 		preferredLane = s.laneForMovement(next.ID, person.route[nextIndex+1], person.id)
 	}
@@ -615,7 +625,7 @@ func (s *Simulation) resetLocked(population int) {
 	}
 	s.clearTaxi()
 	s.people = make([]*personState, 0, population)
-	s.time, s.tick, s.nextID, s.spawnRemainder = 0, 0, 1, 0
+	s.clock.Time, s.clock.Tick, s.nextID, s.spawnRemainder = 0, 0, 1, 0
 	s.vehicleDelay, s.signalDelay, s.releasedDelay = 0, 0, 0
 	s.signalStops, s.signalReleases, s.completedTrips, s.maxSignalQueue = 0, 0, 0, 0
 	s.initSignalsLocked()
@@ -743,40 +753,27 @@ func (s *Simulation) startTripWithLoadsLocked(person *personState, loads map[str
 		start.Position, start.Tangent = start.Way.Sample(start.Along, start.Lane)
 		finish.Position, finish.Tangent = finish.Way.Sample(finish.Along, finish.Lane)
 		direct := start.Way.ID == finish.Way.ID && finish.Along > start.Along+1
-		var connected []*model.Way
-		ok := false
-		var plannedLanes []int
+		var plan interchange.Route
+		var ok bool
 		if direct {
-			connected, ok = s.graph.RouteBetweenWays(start.Way.ID, finish.Way.ID, true)
-		} else if start.Way.ID != finish.Way.ID {
-			if balanced, lanes, found := s.congestionRouteWithLoads(start.Way.ID, finish.Way.ID, "", -1, loads); found {
-				connected = make([]*model.Way, len(balanced))
-				for index, wayID := range balanced {
-					connected[index] = s.graph.Ways[wayID]
-				}
-				plannedLanes = lanes
-				ok = true
-			}
-		}
-		if !ok {
-			connected, ok = s.graph.RouteBetweenWays(start.Way.ID, finish.Way.ID, false)
+			plan = interchange.Route{Steps: []interchange.Step{{WayID: start.Way.ID, EntryLane: start.Lane, ExitLane: start.Lane}}}
+			ok = true
+		} else {
+			plan, ok = s.congestionRouteWithLoads(start.Way.ID, finish.Way.ID, "", -1, start.Along, loads)
 		}
 		if !ok {
 			continue
 		}
-		route := make([]string, 0, len(connected))
-		for _, way := range connected {
-			route = append(route, way.ID)
-		}
+		route, plannedLanes, entryLanes := plan.Arrays()
 		person.origin, person.destination = origin, destination
 		person.position, person.walkTarget = origin, start.Position
 		person.exitPoint, person.destinationAlong, person.destinationLane = finish.Position, finish.Along, finish.Lane
-		person.route, person.routeLanes, person.routeIndex = route, plannedLanes, 0
+		person.route, person.routeLanes, person.routeEntryLanes, person.routeIndex = route, plannedLanes, entryLanes, 0
 		person.state, person.wayID = "walking_to_lane", ""
 		person.lane, person.along = start.Lane, start.Along
 		if len(route) > 1 {
 			if len(person.routeLanes) == len(route) {
-				person.lane = person.routeLanes[0]
+				person.lane = person.routeEntryLanes[0]
 			} else {
 				person.lane = s.laneForMovement(route[0], route[1], person.id)
 			}
@@ -813,21 +810,21 @@ func tripSeed(base int64, personID, trip int) int64 {
 func (s *Simulation) SetPaused(paused bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.paused = paused
+	s.clock.Paused = paused
 }
 
 func (s *Simulation) SetTimeScale(scale float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if scale > 0 && scale <= 10 {
-		s.timeScale = scale
+		s.clock.Rate = scale
 	}
 }
 
 func (s *Simulation) Snapshot() Snapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	snapshot := Snapshot{City: s.graph.Name, Time: s.time, Tick: s.tick, Paused: s.paused, TimeScale: s.timeScale,
+	snapshot := Snapshot{City: s.graph.Name, Time: s.clock.Time, Tick: s.clock.Tick, Paused: s.clock.Paused, TimeScale: s.clock.Rate,
 		Load:    LoadState{Population: len(s.people), SpawnRate: s.spawnRate, MaxPopulation: s.maxPeople},
 		Spacing: SpacingState{SafeGap: s.safeGap, VehicleSize: s.graph.Simulation.VehicleSize},
 		People:  make([]Person, len(s.people)), Signals: s.signalStates()}
@@ -844,6 +841,7 @@ func (s *Simulation) Snapshot() Snapshot {
 					LocalTransform: model.RelativeTo(reference.Position, pose)}, WaitingFor: state.waitingFor,
 				WaitingSignal: state.waitingSignal, WaitingReason: state.waitingReason, Origin: state.origin, Destination: state.destination,
 				Route: append([]string(nil), state.route...), RouteIndex: state.routeIndex, Trip: state.trip,
+				RouteEntryLanes: append([]int(nil), state.routeEntryLanes...), RouteExitLanes: append([]int(nil), state.routeLanes...),
 			}
 			person.Structure = "ground"
 			if way := s.graph.Ways[state.wayID]; way != nil {
@@ -895,8 +893,8 @@ func (s *Simulation) Snapshot() Snapshot {
 		meanSignalDelay = s.releasedDelay / float64(s.signalReleases)
 	}
 	throughput := 0.0
-	if s.time > 0 {
-		throughput = float64(s.completedTrips) * 60 / s.time
+	if s.clock.Time > 0 {
+		throughput = float64(s.completedTrips) * 60 / s.clock.Time
 	}
 	snapshot.Performance = ControlPerformance{
 		Algorithm: algorithm, VehicleDelaySeconds: s.vehicleDelay, SignalDelaySeconds: s.signalDelay,
@@ -904,6 +902,7 @@ func (s *Simulation) Snapshot() Snapshot {
 		CompletedTrips: s.completedTrips, ThroughputPerMinute: throughput,
 		CurrentSignalQueue: currentQueue, MaximumSignalQueue: s.maxSignalQueue,
 	}
+
 	snapshot.Mode = "traffic"
 	if s.taxi != nil {
 		snapshot.Mode = "taxi"
@@ -1006,4 +1005,10 @@ func (s *Simulation) referenceFor(position model.Vec2, wayID string) *model.Inte
 		}
 	}
 	return nearest
+}
+
+func (s *Simulation) Events() []foundation.Event {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.journal.Events()
 }

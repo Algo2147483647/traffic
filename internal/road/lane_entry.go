@@ -3,7 +3,7 @@ package sim
 import (
 	"math"
 
-	"traffic/internal/model"
+	model "traffic/internal/infrastructure/road"
 )
 
 const stoppedVehicleGap = 2.0
@@ -45,6 +45,15 @@ func (s *Simulation) selectReceivingLane(person *personState, way *model.Way, al
 // unusable lane; once traffic becomes dense, they may never be able to merge
 // back and can permanently block every lane at the next stop line.
 func (s *Simulation) routeCompatibleReceivingLanes(person *personState, way *model.Way, routeIndex int, allowed []int) []int {
+	// Hierarchical plans name the actual receiving lane separately from the
+	// later exit lane. Follow its connector; road preparation handles any change.
+	if way != nil && len(person.routeEntryLanes) == len(person.route) && routeIndex < len(person.route) {
+		entry := person.routeEntryLanes[routeIndex]
+		if laneIn(allowed, entry) {
+			return []int{entry}
+		}
+		return nil
+	}
 	if way == nil || routeIndex+1 >= len(person.route) {
 		return allowed
 	}

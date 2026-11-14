@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"traffic/internal/model"
+	model "traffic/internal/infrastructure/road"
 )
 
 func TestMaxPressureEvaluatesEveryPhaseAndSelectsLargestDifferential(t *testing.T) {

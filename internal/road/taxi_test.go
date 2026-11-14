@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 	"traffic/internal/dispatch"
-	"traffic/internal/model"
+	model "traffic/internal/infrastructure/road"
 )
 
 func taxiGraph(t *testing.T) *model.Graph {
@@ -126,7 +126,14 @@ func TestTaxiInterchangeMovements(t *testing.T) {
 				p.position, p.heading = first.Sample(p.along, p.lane)
 				stop := TaxiStop{WayID: last.ID, Along: last.Length - 30}
 				stop.Position, _ = last.Sample(stop.Along, 0)
-				s.taxiSetPlan(v, taxiPlan{route: r.WayIDs, target: stop})
+				plan, ok := s.taxiRoute(p, stop)
+				if !ok {
+					t.Fatal("hierarchical taxi planning failed")
+				}
+				if len(plan.entryLanes) != len(plan.route) || len(plan.lanes) != len(plan.route) {
+					t.Fatal("missing lane expansion")
+				}
+				s.taxiSetPlan(v, plan)
 				v.State = "WithPassenger"
 				seen := map[string]bool{}
 				for i := 0; i < 16000 && v.State != "Alighting"; i++ {

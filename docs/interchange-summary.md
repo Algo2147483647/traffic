@@ -31,8 +31,8 @@
 | Map composition | `scripts/generate_interchange_map.py` |
 | Rotatable trumpet template | `scripts/interchanges/trumpet.py` |
 | Generated runnable map | `configs/presets/four-cell-interchanges.json` |
-| Model contract and validation | `internal/model/types.go`, `graph.go`, `signal_plan.go` |
-| Elevation / access / vehicle execution | `internal/model/traffic.go`, `internal/sim/simulation.go` |
+| Model contract and validation | `internal/infrastructure/road/types.go`, `graph.go`, `signal_plan.go` |
+| Elevation / access / vehicle execution | `internal/infrastructure/road/traffic.go`, `internal/road/simulation.go` |
 | Layered map and route overview | `internal/server/web/app.js` |
 
 ## Validation

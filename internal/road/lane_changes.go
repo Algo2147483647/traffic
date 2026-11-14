@@ -5,7 +5,7 @@ import (
 	"math"
 	"sort"
 
-	"traffic/internal/model"
+	model "traffic/internal/infrastructure/road"
 )
 
 const (
@@ -38,7 +38,7 @@ func (s *Simulation) advanceLaneChangesLocked(dt float64) {
 		person.lanePosition = float64(person.lane)
 		person.laneChanging = false
 		person.laneChangeProgress = 0
-		person.lastLaneChangeAt = s.time
+		person.lastLaneChangeAt = s.clock.Time
 	}
 }
 
@@ -75,7 +75,7 @@ func (s *Simulation) planLaneChangesLocked() {
 		if constrained && routeDistance <= preparationDistance {
 			continue
 		}
-		if person.lastLaneChangeAt > 0 && s.time-person.lastLaneChangeAt < laneChangeCooldown {
+		if person.lastLaneChangeAt > 0 && s.clock.Time-person.lastLaneChangeAt < laneChangeCooldown {
 			continue
 		}
 		leader, currentClearance := s.nearestLeader(person, person.lane)
@@ -115,6 +115,12 @@ func (s *Simulation) planLaneChangesLocked() {
 			}
 			if score > bestScore {
 				bestLane, bestScore = candidate, score
+			}
+		}
+		if bestLane >= 0 && s.policies.LaneChoice != nil {
+			candidate := s.policies.LaneChoice(person.lane, bestLane, way.Lanes)
+			if candidate >= 0 && candidate < way.Lanes && absInt(candidate-person.lane) == 1 && s.laneChangeSafe(person, candidate) {
+				bestLane = candidate
 			}
 		}
 		if bestLane >= 0 {
@@ -269,7 +275,7 @@ func (s *Simulation) advanceRoadVehiclesLocked(dt float64) {
 		}
 		way := s.graph.Ways[person.wayID]
 		active = append(active, person)
-		constraints[person] = laneSpeedConstraint{speed: math.Min(s.graph.Simulation.DriveSpeed, way.SpeedLimit)}
+		constraints[person] = laneSpeedConstraint{speed: s.policySpeed(math.Min(s.graph.Simulation.DriveSpeed, way.SpeedLimit))}
 		for lane := 0; lane < way.Lanes; lane++ {
 			if occupiesLane(person, lane) {
 				key := fmt.Sprintf("%s:%d", person.wayID, lane)

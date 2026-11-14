@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"traffic/internal/model"
+	model "traffic/internal/infrastructure/road"
 )
 
 func simulationGraph(t *testing.T) *model.Graph {
@@ -145,7 +145,7 @@ func TestRuntimeLoadSupportsTenThousandPeople(t *testing.T) {
 func TestClearanceSignalSerializesEmptyMovementArrays(t *testing.T) {
 	simulation := NewFixedTime(simulationGraph(t))
 	control := simulation.graph.Intersections["A"].TrafficControl
-	simulation.time = control.Phases[0].DurationSeconds + .1
+	simulation.clock.Time = control.Phases[0].DurationSeconds + .1
 	snapshot := simulation.Snapshot()
 	data, err := json.Marshal(snapshot)
 	if err != nil {
@@ -223,7 +223,7 @@ func TestVehicleWaitsForRedSignal(t *testing.T) {
 	}
 	// The step crosses the fixed-time boundary. Stop-line decisions must observe
 	// the end-of-step clock (5.05), not the stale start time (4.95).
-	simulation.time = 4.95
+	simulation.clock.Time = 4.95
 	simulation.advanceLocked(.1)
 	if simulation.people[0].state != "turning" || simulation.people[0].routeIndex != 1 {
 		t.Fatalf("vehicle did not enter its turn on green: %+v", simulation.people[0])

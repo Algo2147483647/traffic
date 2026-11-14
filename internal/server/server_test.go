@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"traffic/internal/model"
-	"traffic/internal/sim"
+	model "traffic/internal/infrastructure/road"
+	sim "traffic/internal/road"
 )
 
 func testHandler(t *testing.T) http.Handler {

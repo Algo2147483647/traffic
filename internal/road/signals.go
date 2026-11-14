@@ -3,7 +3,7 @@ package sim
 import (
 	"math"
 
-	"traffic/internal/model"
+	model "traffic/internal/infrastructure/road"
 )
 
 const (
@@ -66,6 +66,20 @@ func (s *Simulation) updateSignalsLocked(dt float64) {
 	for id, runtime := range s.signals {
 		control := s.graph.Intersections[id].TrafficControl
 		decision := scheduler.Evaluate(control, queues, runtime.LastServedPhase)
+		if s.policies.PhaseScores != nil {
+			scores := make([]float64, len(decision.Phases))
+			for i, p := range decision.Phases {
+				scores[i] = p.Pressure
+			}
+			values := s.policies.PhaseScores(scores)
+			if len(values) == len(scores) {
+				for i, v := range values {
+					if v >= 0 && !math.IsNaN(v) && !math.IsInf(v, 0) {
+						decision.Phases[i].Pressure = v
+					}
+				}
+			}
+		}
 		runtime.PhasePressures = decision.Phases
 		s.advanceSignalLocked(control, runtime, dt)
 	}
@@ -268,6 +282,9 @@ func (s *Simulation) signalQueuesLocked() QueueSnapshot {
 		if person.routeIndex+2 < len(person.route) {
 			if len(person.routeLanes) == len(person.route) {
 				targetLane = person.routeLanes[person.routeIndex+1]
+				if len(person.routeEntryLanes) == len(person.route) {
+					targetLane = person.routeEntryLanes[person.routeIndex+1]
+				}
 			} else {
 				targetLane = s.laneForMovement(toWayID, person.route[person.routeIndex+2], person.id)
 			}
@@ -290,9 +307,12 @@ func (s *Simulation) signalMovement(intersectionID, fromWayID, toWayID string, l
 	if intersection == nil {
 		return model.TrafficMovementConfig{}, false
 	}
+	if intersection.TrafficControl.Mode == "flow" && s.policies.FlowPermit != nil && !s.policies.FlowPermit(FlowRequest{intersectionID, fromWayID, toWayID, lane, s.clock.Time}) {
+		return model.TrafficMovementConfig{}, false
+	}
 	runtime := s.signals[intersectionID]
 	if runtime == nil {
-		active := intersection.TrafficControl.Active(s.time)
+		active := intersection.TrafficControl.Active(s.clock.Time)
 		if active.Stage != "green" {
 			return model.TrafficMovementConfig{}, false
 		}
@@ -338,7 +358,7 @@ func movementForLaneInPhase(phase model.TrafficPhaseConfig, fromWayID, toWayID s
 func (s *Simulation) activeSignal(intersection *model.Intersection) model.ActivePhase {
 	runtime := s.signals[intersection.ID]
 	if runtime == nil {
-		return intersection.TrafficControl.Active(s.time)
+		return intersection.TrafficControl.Active(s.clock.Time)
 	}
 	phase := intersection.TrafficControl.Phases[runtime.PhaseIndex]
 	duration := runtime.GreenTarget

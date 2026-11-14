@@ -2,7 +2,7 @@ package sim
 
 import (
 	"testing"
-	"traffic/internal/model"
+	model "traffic/internal/infrastructure/road"
 )
 
 func TestInterchangeRampTravel(t *testing.T) {

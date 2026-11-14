@@ -86,6 +86,9 @@ async function createWindow() {
         for(let i=0;i<160;i++){snap=await control({action:'step',delta:4});if(snap.taxi.completed>=2)break;}
         if(snap.taxi.completed<2||snap.taxi.picked<2)throw Error('Taxi pickup/dropoff failed');
         taxiResult={completed:snap.taxi.completed,picked:snap.taxi.picked};
+        const planned=snap.people.filter(p=>p.route.length>1);
+        if(!planned.length||planned.some(p=>p.route_entry_lanes?.length!==p.route.length||p.route_exit_lanes?.length!==p.route.length))throw Error('Missing expanded lane paths');
+        taxiResult.expandedLaneRoutes=planned.length;
         const liveTime=snap.time,liveCreated=snap.taxi.created;
         document.querySelector('#taxi-fleet-range').value='9';document.querySelector('#taxi-fleet-range').dispatchEvent(new Event('input'));
         document.querySelector('#taxi-demand-range').value='15';document.querySelector('#taxi-demand-range').dispatchEvent(new Event('input'));
