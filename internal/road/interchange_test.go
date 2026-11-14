@@ -20,7 +20,7 @@ func TestInterchangeRampTravel(t *testing.T) {
 		s.Step(.05)
 		if i%20 == 0 {
 			for _, p := range s.Snapshot().People {
-				if p.Elevation < 0 || p.Elevation > 24 {
+				if p.Elevation < 0 || p.Elevation > 6.5 {
 					t.Fatal("invalid height")
 				}
 				if w := g.Ways[p.WayID]; w != nil && w.Role == "loop_ramp" {
@@ -28,7 +28,7 @@ func TestInterchangeRampTravel(t *testing.T) {
 				}
 				ramp = ramp || p.Structure == "ramp"
 				deck = deck || p.Structure == "bridge"
-				slope = slope || (p.Structure == "ramp" && p.Elevation > 0 && p.Elevation < 24)
+				slope = slope || (p.Structure == "ramp" && p.Elevation > 0 && p.Elevation < 6.5)
 			}
 		}
 	}

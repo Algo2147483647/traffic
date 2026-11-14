@@ -2,22 +2,22 @@
   "schema_version": 1,
   "units": "meters_seconds",
   "cloverleaf": {
-    "mainline_offset": 24,
-    "cd_offset": 70,
+    "mainline_offset": 8,
+    "cd_offset": 22,
     "lane_width": 3.75,
-    "loop_radius": 140,
-    "right_radius": 1100,
-    "split_station": 1500,
-    "cd_station": 1350,
-    "portal_station": 1800,
-    "deck_height": 24,
-    "sample_spacing": 6,
+    "loop_radius": 55,
+    "right_radius": 350,
+    "split_station": 620,
+    "cd_station": 480,
+    "portal_station": 870,
+    "deck_height": 6.5,
+    "sample_spacing": 2,
     "mainline_lanes": 3,
     "cd_lanes": 2,
-    "mainline_speed": 27.77777778,
-    "cd_speed": 18.05555556,
+    "mainline_speed": 22.22222222222222,
+    "cd_speed": 13.88888888888889,
     "loop_speed": 8.33333333,
-    "right_speed": 13.88888889
+    "right_speed": 11.11111111111111
   },
   "catalogue": [
     {
@@ -62,13 +62,19 @@
     }
   ],
   "trumpet": {
-    "loop_radius": 100,
-    "carriageway_offset": 24,
-    "sample_spacing": 4,
-    "mainline_station": 650,
-    "mainline_portal": 900,
-    "branch_station": 360,
-    "branch_portal": 520
+    "loop_radius": 60,
+    "carriageway_offset": 8,
+    "sample_spacing": 2,
+    "mainline_station": 400,
+    "mainline_portal": 620,
+    "branch_station": 310,
+    "branch_portal": 430,
+    "bridge_start": 60,
+    "bridge_end": -150,
+    "semi_control_y": -450,
+    "semi_control_x": -280,
+    "right_control_x": 170,
+    "right_control_y": 130
   },
   "world_units_per_km": 1000
 }

@@ -90,7 +90,7 @@ async function createWindow() {
         for(let i=0;i<50&&(await get('/api/snapshot')).mode!=='taxi';i++)await wait(100);
         let snap=await get('/api/snapshot');if(snap.mode!=='taxi'||snap.taxi.vehicles.length!==6)throw Error('Taxi mode did not start');
         await control({action:'pause'});
-        for(let i=0;i<160;i++){snap=await control({action:'step',delta:4});if(snap.taxi.completed>=2)break;}
+        for(let i=0;i<400;i++){snap=await control({action:'step',delta:4});if(snap.taxi.completed>=2)break;}
         if(snap.taxi.completed<2||snap.taxi.picked<2)throw Error('Taxi pickup/dropoff failed');
         taxiResult={completed:snap.taxi.completed,picked:snap.taxi.picked};
         const planned=snap.people.filter(p=>p.route.length>1);

@@ -10,7 +10,7 @@ city.update(name='Four-Cell Interchange Network', description='Central cloverlea
 city['simulation'] = dict(base['simulation'], people=320, intersection_radius=20, max_people=10000)
 nodes={}
 def node(id,x,y,layer=0,group='',flow=False):
-    n=dict(id=id,name=id.replace('_',' '),position=dict(x=x,y=y),layer=layer,elevation=24*layer,interchange=group)
+    n=dict(id=id,name=id.replace('_',' '),position=dict(x=x,y=y),layer=layer,elevation=profile['cloverleaf']['deck_height']*layer,interchange=group)
     if flow:n['traffic_control']={'mode':'flow'}
     city['intersections'].append(n);nodes[id]=n;return id
 def way(a,b,lanes=3,structure='ground',points=None):

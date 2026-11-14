@@ -52,6 +52,26 @@ class GeometryTests(unittest.TestCase):
         crossings+=1
         # Only the two fixed-height bridge decks may cross the ground mainline.
         self.assertEqual({a['structure'],b['structure']},{'ground','bridge'},(a['id'],b['id']))
-        self.assertEqual(abs(nodes[a['from']]['elevation']-nodes[b['from']]['elevation']),24)
+        self.assertEqual(abs(nodes[a['from']]['elevation']-nodes[b['from']]['elevation']),6.5)
    self.assertEqual(crossings,4,group)
+ def test_compact_geometry_curvature_and_grade(self):
+  city=json.loads((Path(__file__).resolve().parents[1]/'configs/presets/four-cell-interchanges.json').read_text())
+  nodes={n['id']:n for n in city['intersections']}
+  for w in city['ways']:
+   if not w.get('role'):continue
+   pts=[(p['x'],p['y']) for p in w.get('points',[nodes[w['from']]['position'],nodes[w['to']]['position']])]
+   length=sum(math.dist(a,b) for a,b in zip(pts,pts[1:]))
+   # The executor uses smoothstep elevation; its peak slope is 1.5 * rise/run.
+   grade=1.5*abs(nodes[w['from']]['elevation']-nodes[w['to']]['elevation'])/length
+   self.assertLessEqual(grade,.04,w['id'])
+   for a,b,c in zip(pts,pts[1:],pts[2:]):
+    area=abs((b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]))
+    if area<1e-6:continue
+    radius=math.dist(a,b)*math.dist(b,c)*math.dist(c,a)/(2*area)
+    self.assertLessEqual(w['speed_limit']**2/radius,2.0,w['id'])
+ def test_compact_envelopes(self):
+  city=json.loads((Path(__file__).resolve().parents[1]/'configs/presets/four-cell-interchanges.json').read_text())
+  for group,maximum in [('C',1741),('N',1241),('S',1241),('W',1241),('E',1241)]:
+   points=[n['position'] for n in city['intersections'] if n.get('interchange')==group]
+   for axis in ['x','y']:self.assertLessEqual(max(p[axis] for p in points)-min(p[axis] for p in points),maximum)
 if __name__=='__main__':unittest.main()

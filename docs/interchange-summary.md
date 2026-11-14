@@ -1,3 +1,6 @@
+> Current geometry: see [Compact interchange revision](compact-interchanges.md).
+> Earlier dimensions below describe the previous layout.
+
 # Interchange implementation summary
 
 ## Delivered

@@ -20,14 +20,14 @@ def build_cloverleaf(city,nodes,node,way,profile,center=(3000,3000)):
         stations=[-p['cd_station'],-rr-offset,-r-offset,r+offset,rr+offset,p['cd_station']]
         cd=[n(tag,x,offset) for tag,x in zip(['cd_in','right_exit','loop_merge','loop_exit','right_merge','cd_out'],stations)]
         structure='bridge' if level else 'ground'
-        approach=add_way(a,split,3,'mainline','ramp' if level else 'ground',p['mainline_speed'])
-        bypass=add_way(split,merge,3,'mainline',structure,p['mainline_speed'])
-        departure=add_way(merge,b,3,'mainline','ramp' if level else 'ground',p['mainline_speed'])
+        approach=add_way(a,split,p['mainline_lanes'],'mainline','ramp' if level else 'ground',p['mainline_speed'])
+        bypass=add_way(split,merge,p['mainline_lanes'],'mainline',structure,p['mainline_speed'])
+        departure=add_way(merge,b,p['mainline_lanes'],'mainline','ramp' if level else 'ground',p['mainline_speed'])
         entrycurve=cubic((-p['split_station'],p['mainline_offset']),(-p['split_station']+70,p['mainline_offset']),(-p['cd_station']-70,offset),(-p['cd_station'],offset),space)
         exitcurve=cubic((p['cd_station'],offset),(p['cd_station']+70,offset),(p['split_station']-70,p['mainline_offset']),(p['split_station'],p['mainline_offset']),space)
-        entry=add_way(split,cd[0],2,'cd_transition',structure,p['cd_speed'],[rotate(v,angle,center) for v in entrycurve[1:-1]])
-        segments=[add_way(cd[i],cd[i+1],2,'collector_distributor',structure,p['cd_speed']) for i in range(5)]
-        exit=add_way(cd[-1],merge,2,'cd_transition',structure,p['cd_speed'],[rotate(v,angle,center) for v in exitcurve[1:-1]])
+        entry=add_way(split,cd[0],p['cd_lanes'],'cd_transition',structure,p['cd_speed'],[rotate(v,angle,center) for v in entrycurve[1:-1]])
+        segments=[add_way(cd[i],cd[i+1],p['cd_lanes'],'collector_distributor',structure,p['cd_speed']) for i in range(5)]
+        exit=add_way(cd[-1],merge,p['cd_lanes'],'cd_transition',structure,p['cd_speed'],[rotate(v,angle,center) for v in exitcurve[1:-1]])
         dirs.append(dict(a=a,b=b,split=split,merge=merge,cd=cd,approach=approach,bypass=bypass,departure=departure,entry=entry,segments=segments,exit=exit))
         ports.setdefault(arrivals[k],[None,None])[0]=a;ports.setdefault(departures[k],[None,None])[1]=b
     routes=[]

@@ -1,3 +1,6 @@
+> Current geometry: see [Compact interchange revision](compact-interchanges.md).
+> Earlier dimensions below describe the previous layout.
+
 # Backend implementation audit and remaining work
 
 Audit date: 2026-11-14. Scope: current source, production call sites, configuration,

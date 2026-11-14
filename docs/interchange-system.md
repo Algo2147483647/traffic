@@ -1,3 +1,6 @@
+> Current geometry: see [Compact interchange revision](compact-interchanges.md).
+> Earlier dimensions below describe the previous layout.
+
 # Interchange system — design and implementation specification
 
 ## Scope and design decision
