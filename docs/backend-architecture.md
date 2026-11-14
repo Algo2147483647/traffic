@@ -207,6 +207,13 @@ in map configuration, not from the interactive dispatch selector.
    Python assignment, pickup/dropoff and the existing 36 interchange movements.
 8. Rebuild and smoke-test desktop/dist/win-unpacked/Meridian Traffic.exe in place.
 
+## Implementation audit
+
+The source-level [implementation audit and ordered backlog](backend-implementation-audit.md)
+identifies running modules, partial strategy hooks and unwired metro/demand contracts,
+including the physical scale issue in Map 2. It supersedes any interpretation that
+all proposed algorithm interfaces or transport modes are already implemented.
+
 ## Remaining target capabilities
 
 This is a behavior-preserving modular backend refactor, not a completed multimodal

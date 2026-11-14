@@ -28,6 +28,7 @@
       </div>
       <div class="settings-view-controls">
         <button id="zoom-out-button" type="button" class="quiet icon-button" aria-label="Zoom out">−</button><span id="view-scale" class="view-scale">100%</span><button id="zoom-in-button" type="button" class="quiet icon-button" aria-label="Zoom in">+</button><button id="fit-button" type="button" class="quiet">Fit map</button><button id="fullscreen-button" type="button" class="quiet">Full screen</button>
+        <label class="coordinate-control"><input id="show-coordinates" type="checkbox" checked> Show coordinates and scale</label>
       </div>
       <section id="taxi-settings" hidden>
         <div class="settings-section-heading"><h3>Taxi service</h3><span id="taxi-fleet-status"></span></div>
@@ -62,7 +63,7 @@
     <section class="glass stats-overlay" aria-label="Live traffic statistics">
       <div class="stat-primary"><div><strong id="people-count">—</strong><span id="population-label">population</span></div><strong id="sim-time" aria-label="Simulation time">00:00.0</strong></div>
       <div class="stat-row"><span><i class="dot driving"></i>Driving <b id="driving-count">—</b></span><span><i class="dot waiting"></i>Waiting <b id="waiting-count">—</b></span><span><i class="dot walking"></i>Walking <b id="walking-count">—</b></span></div>
-      <div class="stat-meta"><span><b id="average-speed">—</b> avg speed</span><span><b id="way-count">—</b> ways / <b id="intersection-count">—</b> signals / <b id="lane-count">—</b> lanes</span></div>
+      <div class="stat-meta"><span><b id="average-speed">—</b> km/h avg</span><span><b id="way-count">—</b> ways / <b id="intersection-count">—</b> signals / <b id="lane-count">—</b> lanes</span></div>
       <div class="efficiency-row"><span><b id="signal-queue">—</b>signal queue</span><span><b id="throughput">—</b>trips/min</span><span><b id="mean-delay">—</b>mean delay</span></div>
       <div id="taxi-stats" hidden><div><span>Orders</span><b id="taxi-created">0</b></div><div><span>Picked up</span><b id="taxi-picked">0</b></div><div><span>Completed</span><b id="taxi-completed">0</b></div><div><span>Cancelled</span><b id="taxi-cancelled">0</b></div><div title="Mean wait among picked-up orders"><span>Mean wait</span><b id="taxi-wait">0 s</b></div><div><span>Solver</span><b id="taxi-solver">0 ms</b></div></div>
     </section>

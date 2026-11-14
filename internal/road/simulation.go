@@ -200,6 +200,7 @@ type personState struct {
 
 type Simulation struct {
 	clock          foundation.Clock
+	stepRemainder  float64
 	journal        foundation.Journal
 	policies       Strategies
 	taxi           *taxiRuntime
@@ -318,18 +319,18 @@ func (s *Simulation) Step(dt float64) {
 	s.advanceLocked(dt)
 }
 
+// Both scenarios advance on the same 50 ms physical clock. Fractional input
+// time is carried into the next call; playback rate changes only the step count.
 func (s *Simulation) advanceLocked(dt float64) {
-	if s.taxi == nil {
-		s.advanceSubstep(dt)
-		return
-	}
-	for dt > 1e-9 {
+	s.stepRemainder += dt
+	for s.stepRemainder >= .05-1e-9 {
 		before := s.clock.Time
-		s.advanceSubstep(math.Min(.05, dt))
+		s.advanceSubstep(.05)
 		if s.clock.Time == before {
+			s.stepRemainder = 0
 			return
 		}
-		dt -= math.Min(.05, dt)
+		s.stepRemainder = math.Max(0, s.stepRemainder-.05)
 	}
 }
 func (s *Simulation) advanceSubstep(dt float64) {
@@ -625,6 +626,7 @@ func (s *Simulation) resetLocked(population int) {
 	}
 	s.clearTaxi()
 	s.people = make([]*personState, 0, population)
+	s.stepRemainder = 0
 	s.clock.Time, s.clock.Tick, s.nextID, s.spawnRemainder = 0, 0, 1, 0
 	s.vehicleDelay, s.signalDelay, s.releasedDelay = 0, 0, 0
 	s.signalStops, s.signalReleases, s.completedTrips, s.maxSignalQueue = 0, 0, 0, 0

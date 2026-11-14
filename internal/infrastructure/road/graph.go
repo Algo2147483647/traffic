@@ -26,8 +26,8 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 	if cfg.WorldUnitsPerKM == 0 {
 		cfg.WorldUnitsPerKM = 1000
 	}
-	if cfg.WorldUnitsPerKM < 0 || math.IsNaN(cfg.WorldUnitsPerKM) || math.IsInf(cfg.WorldUnitsPerKM, 0) {
-		return nil, fmt.Errorf("world_units_per_km must be positive and finite")
+	if cfg.WorldUnitsPerKM != 1000 || math.IsNaN(cfg.WorldUnitsPerKM) || math.IsInf(cfg.WorldUnitsPerKM, 0) {
+		return nil, fmt.Errorf("road coordinates must use meters: world_units_per_km must equal 1000")
 	}
 	cfg.DrivingSide = strings.ToLower(strings.TrimSpace(cfg.DrivingSide))
 	if cfg.DrivingSide == "" {
@@ -101,7 +101,7 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 			return nil, fmt.Errorf("way %q must have at least one lane", input.ID)
 		}
 		if input.LaneWidth <= 0 {
-			input.LaneWidth = 7
+			input.LaneWidth = 3.5
 		}
 		input.RoadClass = strings.ToLower(strings.TrimSpace(input.RoadClass))
 		if input.RoadClass == "" {
@@ -248,10 +248,10 @@ func applySimulationDefaults(cfg *SimulationConfig) {
 		cfg.TickMS = 50
 	}
 	if cfg.WalkSpeed <= 0 {
-		cfg.WalkSpeed = 24
+		cfg.WalkSpeed = 1.4
 	}
 	if cfg.DriveSpeed <= 0 {
-		cfg.DriveSpeed = 90
+		cfg.DriveSpeed = 25
 	}
 	if cfg.SafeGap <= 0 {
 		cfg.SafeGap = 4
@@ -260,7 +260,7 @@ func applySimulationDefaults(cfg *SimulationConfig) {
 		cfg.SnapshotFPS = 12
 	}
 	if cfg.VehicleSize <= 0 {
-		cfg.VehicleSize = 8
+		cfg.VehicleSize = 6
 	}
 	if cfg.Intersection <= 0 {
 		cfg.Intersection = 22
@@ -302,13 +302,13 @@ func defaultDemand(roadClass string) float64 {
 func defaultSpeed(roadClass string) float64 {
 	switch roadClass {
 	case "arterial":
-		return 115
+		return 115 / 3.6
 	case "collector":
-		return 82
+		return 82 / 3.6
 	case "ramp":
-		return 92
+		return 92 / 3.6
 	default:
-		return 58
+		return 58 / 3.6
 	}
 }
 

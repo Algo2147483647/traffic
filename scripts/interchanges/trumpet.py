@@ -15,7 +15,7 @@ def build_trumpet(city,nodes,node,way,prefix,center,angle,profile):
     sb=n('South_bridge_start',-offset,-r-offset,1);se=n('South_bridge_end',-offset,100,1)
     def road(a,b,lanes,role,structure='ground',points=None):
         way(a,b,lanes,structure,[xy(q) for q in points[1:-1]] if points else None)
-        w=city['ways'][-1];w.update(role=role,geometry='sampled',trip_access=False,speed_limit=30 if role=='loop_ramp' else 50 if role in ('right_ramp','semi_direct_ramp') else 80)
+        w=city['ways'][-1];w.update(role=role,geometry='sampled',trip_access=False,speed_limit=(30 if role=='loop_ramp' else 50 if role in ('right_ramp','semi_direct_ramp') else 80)/3.6)
         return w['id']
     wa=road(wi,ws,3,'mainline');wt=road(ws,em,3,'mainline');we=road(em,eo,3,'mainline')
     ea=road(ei,es,3,'mainline');et=road(es,wm,3,'mainline');ee=road(wm,wo,3,'mainline')

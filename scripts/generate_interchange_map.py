@@ -14,7 +14,7 @@ def node(id,x,y,layer=0,group='',flow=False):
     if flow:n['traffic_control']={'mode':'flow'}
     city['intersections'].append(n);nodes[id]=n;return id
 def way(a,b,lanes=3,structure='ground',points=None):
-    w=dict(id=a+'__'+b,name=a+' to '+b,**{'from':a,'to':b},lanes=lanes,lane_width=8,speed_limit=55 if structure=='ramp' else 100,road_class='ramp' if structure=='ramp' else 'arterial',structure=structure)
+    w=dict(id=a+'__'+b,name=a+' to '+b,**{'from':a,'to':b},lanes=lanes,lane_width=profile['cloverleaf']['lane_width'],speed_limit=(55 if structure=='ramp' else 100)/3.6,road_class='ramp' if structure=='ramp' else 'arterial',structure=structure)
     if points:w['points']=[nodes[a]['position']]+[dict(x=x,y=y) for x,y in points]+[nodes[b]['position']]
     city['ways'].append(w)
 def pair(a,b,lanes=3):way(a,b,lanes);way(b,a,lanes)

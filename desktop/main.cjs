@@ -30,6 +30,8 @@ async function createWindow() {
       const wait = ms => new Promise(r => setTimeout(r, ms));
       for (let i = 0; i < 100 && document.querySelector('#map-preset').options[0]?.value !== "preset-1"; i++) await wait(100);
       if (document.querySelector('#map-preset').options[0]?.value !== "preset-1") throw Error('Map selector did not load');
+      const coordinates=document.querySelector('#show-coordinates');
+      if(!coordinates.checked)coordinates.click();
       const get = p => fetch(p).then(r => r.json());
       const control = body => fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => { if (!r.ok) throw Error('Control failed'); return r.json(); });
       const preset = ${JSON.stringify(process.env.TRAFFIC_SMOKE_PRESET || '')};
@@ -77,6 +79,11 @@ async function createWindow() {
         document.querySelector("#inspector-toggle").click();await wait(100);
       }
       let taxiResult=null;
+      drawnLabels.length=0;coordinates.click();await wait(150);
+      if(coordinates.checked||drawnLabels.some(text=>text==='X · km'||text==='Y · km'||text==='6 × 6 km'))throw Error('Coordinates did not hide');
+      if(localStorage.getItem('traffic-show-coordinates')!=='false')throw Error('Coordinate preference not saved');
+      drawnLabels.length=0;coordinates.click();await wait(150);
+      if(!coordinates.checked||!drawnLabels.includes('X · km')||!drawnLabels.includes('Y · km'))throw Error('Coordinates did not restore');
       if (${JSON.stringify(process.env.TRAFFIC_SMOKE_TAXI === '1')}) {
         document.querySelector('#taxi-fleet').value='6';document.querySelector('#taxi-demand').value='0';
         document.querySelector('#simulation-mode').value='taxi';document.querySelector('#simulation-mode').dispatchEvent(new Event('change'));

@@ -7,10 +7,17 @@
   let renderStructure = null;
   const $ = (id) => document.getElementById(id);
   const state = {
-    city: null, snapshot: null, selected: null, layerFilter: "all", showTransforms: false, transform: null,
+    city: null, snapshot: null, selected: null, layerFilter: "all", showTransforms: false, showCoordinates: true, transform: null,
     camera: { zoom: 1, panX: 0, panY: 0 }, pointers: new Map(), laneDirections: new Map(), presetID: null,
     compute: { tick: null, measuredAt: 0, hz: null },
   };
+  try { state.showCoordinates = localStorage.getItem("traffic-show-coordinates") !== "false"; } catch {}
+  $("show-coordinates").checked = state.showCoordinates;
+  $("show-coordinates").addEventListener("change", event => {
+    state.showCoordinates = event.target.checked;
+    try { localStorage.setItem("traffic-show-coordinates", String(state.showCoordinates)); } catch {}
+    draw();
+  });
 
   function setConnection(status, label) {
     const root = document.querySelector(".connection");
@@ -129,6 +136,7 @@
   }
 
   function drawCoordinateRulers() {
+    if (!state.showCoordinates) return;
     const t=currentTransform(), b=state.city.bounds, units=state.city.world_units_per_km || 1000;
     const nice=value=>{const power=10**Math.floor(Math.log10(value)), n=value/power;return (n>=5?5:n>=2?2:1)*power;};
     const step=nice(110/t.scale/units), stepWorld=step*units;
@@ -294,7 +302,7 @@
         const groups = [];
         for (let index = 0; index < turns.length; index += 2) groups.push(turns.slice(index, index + 2));
         const metreScale = way.lane_width / 3.5;
-        const nominalMetres = way.speed_limit >= 100 ? 9 : way.speed_limit > 60 ? 6 : way.speed_limit > 40 ? 4.5 : 3;
+        const nominalMetres = way.speed_limit*3.6 >= 100 ? 9 : way.speed_limit*3.6 > 60 ? 6 : way.speed_limit*3.6 > 40 ? 4.5 : 3;
         const arrowLength = Math.max(6, nominalMetres * metreScale);
         const stopGap = 3 * metreScale;
         const groupSpan = groups.length * arrowLength + Math.max(0, groups.length - 1) * stopGap;
@@ -429,7 +437,7 @@
       if (person.state.startsWith("walking") || person.state === "arrived") {
         ctx.fillStyle = person.state === "arrived" ? "#ffffff" : "#efc85b"; ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=4*scale;ctx.beginPath();ctx.arc(0,0,4*scale,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle="rgba(7,16,14,.9)";ctx.lineWidth=.8*scale;ctx.stroke();
       } else {
-        const way=ways[person.way_id],length=(state.city.simulation.vehicle_size||12)*scale,width=Math.min(6.5,(way?.lane_width||7)*.72)*scale;const taxi=state.snapshot.taxi?.vehicles.find(v=>v.id===person.id);ctx.fillStyle=taxi?({Idle:"#a8b0b5",ToPickup:"#efc85b",Boarding:"#efc85b",WithPassenger:"#69d6ef",Alighting:"#69d6ef"}[taxi.state]||"#eee"):(person.state==="waiting"?"#ff785f":"#c8f26b");ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=4*scale;ctx.fillRect(-length/2,-width/2,length,width);ctx.shadowBlur=0;ctx.strokeStyle="rgba(6,14,12,.92)";ctx.lineWidth=.7*scale;ctx.strokeRect(-length/2,-width/2,length,width);
+        const way=ways[person.way_id],length=(state.city.simulation.vehicle_size||6)*scale,width=1.8*scale;const taxi=state.snapshot.taxi?.vehicles.find(v=>v.id===person.id);ctx.fillStyle=taxi?({Idle:"#a8b0b5",ToPickup:"#efc85b",Boarding:"#efc85b",WithPassenger:"#69d6ef",Alighting:"#69d6ef"}[taxi.state]||"#eee"):(person.state==="waiting"?"#ff785f":"#c8f26b");ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=4*scale;ctx.fillRect(-length/2,-width/2,length,width);ctx.shadowBlur=0;ctx.strokeStyle="rgba(6,14,12,.92)";ctx.lineWidth=.7*scale;ctx.strokeRect(-length/2,-width/2,length,width);
       }
       if (selected) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.2 * scale; ctx.beginPath(); ctx.arc(0, 0, 8 * scale, 0, Math.PI * 2); ctx.stroke(); }
       ctx.restore();
@@ -452,7 +460,7 @@
     const minutes = Math.floor(snapshot.time / 60).toString().padStart(2, "0"), seconds = (snapshot.time % 60).toFixed(1).padStart(4, "0");
     $("sim-time").textContent = `${minutes}:${seconds}`; $("people-count").textContent = snapshot.people.length;
     $("driving-count").textContent = snapshot.stats.driving; $("walking-count").textContent = snapshot.stats.walking;
-    $("waiting-count").textContent = snapshot.stats.waiting; $("average-speed").textContent = snapshot.stats.average_speed.toFixed(1);
+    $("waiting-count").textContent = snapshot.stats.waiting; $("average-speed").textContent = (snapshot.stats.average_speed*3.6).toFixed(1);
     const performance = snapshot.control_performance;
     if (performance) { $("signal-queue").textContent = performance.current_signal_queue; $("throughput").textContent = performance.throughput_per_minute.toFixed(1); $("mean-delay").textContent = `${performance.mean_signal_delay_seconds.toFixed(1)}s`; }
     $("load-current").textContent = snapshot.load?.population ?? snapshot.people.length;

@@ -442,3 +442,9 @@ The road and taxi engines now search directional interchange macro nodes and exp
 each selected transfer into actual roads with explicit entry/exit lanes. Pickup,
 delivery, cruising and congestion rerouting use the same planner. See
 [the routing contract and verification](docs/hierarchical-routing.md).
+
+See the [backend implementation audit and remaining work](docs/backend-implementation-audit.md)
+for the current capability matrix and implementation order. Settings can hide the
+coordinate rulers and scale using **Show coordinates and scale**.
+
+Physical units and time stepping are documented in [physical-units.md](docs/physical-units.md).

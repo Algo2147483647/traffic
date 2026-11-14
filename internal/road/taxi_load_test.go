@@ -7,11 +7,14 @@ import (
 func TestTaxiSustainedService(t *testing.T) {
 	s := New(taxiGraph(t))
 	c := DefaultTaxiConfig()
+	// Preserve offered trips per free-flow journey after km/h-to-m/s calibration.
+	c.Demand /= 3.6
+	c.MaxWait *= 3.6
 	_ = s.SetMode("taxi", c)
 	half := 0
-	for i := 0; i < 12000; i++ {
+	for i := 0; i < 43200; i++ {
 		s.Step(.05)
-		if i == 6000 {
+		if i == 21600 {
 			half = s.taxi.completed
 		}
 	}

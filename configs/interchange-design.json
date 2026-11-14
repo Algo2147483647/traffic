@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "units": "simulation_world_units",
+  "units": "meters_seconds",
   "cloverleaf": {
     "mainline_offset": 24,
     "cd_offset": 70,
-    "lane_width": 8,
+    "lane_width": 3.75,
     "loop_radius": 140,
     "right_radius": 1100,
     "split_station": 1500,
@@ -14,10 +14,10 @@
     "sample_spacing": 6,
     "mainline_lanes": 3,
     "cd_lanes": 2,
-    "mainline_speed": 100,
-    "cd_speed": 65,
-    "loop_speed": 30,
-    "right_speed": 50
+    "mainline_speed": 27.77777778,
+    "cd_speed": 18.05555556,
+    "loop_speed": 8.33333333,
+    "right_speed": 13.88888889
   },
   "catalogue": [
     {

@@ -16,7 +16,7 @@ func TestInterchangeRampTravel(t *testing.T) {
 	}
 	s := New(g)
 	ramp, deck, slope, loop := false, false, false, false
-	for i := 0; i < 1600; i++ {
+	for i := 0; i < 8000; i++ {
 		s.Step(.05)
 		if i%20 == 0 {
 			for _, p := range s.Snapshot().People {
