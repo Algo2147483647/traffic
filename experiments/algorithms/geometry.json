@@ -1,0 +1,12 @@
+{
+  "id": "python.geometry",
+  "name": "Python geometry experiment",
+  "capability": "geometry",
+  "algorithm_version": "1",
+  "contract_version": 1,
+  "command": [
+    "python",
+    "extensions.py"
+  ],
+  "wall_timeout_ms": 1500
+}

@@ -1,0 +1,12 @@
+{
+  "id": "python.motion",
+  "name": "Python motion experiment",
+  "capability": "motion",
+  "algorithm_version": "1",
+  "contract_version": 1,
+  "command": [
+    "python",
+    "extensions.py"
+  ],
+  "wall_timeout_ms": 1500
+}

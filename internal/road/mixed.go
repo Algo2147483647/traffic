@@ -12,6 +12,12 @@ func (s *Simulation) setDemand(c demand.Config) error {
 	if math.IsNaN(c.Rate) || math.IsInf(c.Rate, 0) || c.Rate < 0 || c.Rate > 60 || math.IsNaN(c.TaxiShare) || c.TaxiShare < 0 || c.TaxiShare > 1 {
 		return fmt.Errorf("invalid shared demand")
 	}
+	if math.IsNaN(c.MetroShare) || math.IsInf(c.MetroShare, 0) || c.MetroShare < 0 || c.MetroShare+c.TaxiShare > 1 {
+		return fmt.Errorf("invalid mode shares")
+	}
+	if c.MetroShare > 0 && len(s.metro.ServedPairs()) == 0 {
+		return fmt.Errorf("map has no served metro journeys")
+	}
 	if len(s.taxiStops()) < 2 {
 		return fmt.Errorf("map needs two trip-access roads")
 	}
@@ -30,8 +36,9 @@ func (s *Simulation) setDemand(c demand.Config) error {
 	if s.taxi == nil && c.TaxiShare > 0 {
 		s.startTaxiLive(DefaultTaxiConfig())
 	}
+	s.metro.UseSharedDemand()
 	s.mode = "mixed"
-	if c.TaxiShare == 0 {
+	if c.TaxiShare == 0 && c.MetroShare == 0 {
 		s.mode = "traffic"
 	}
 	if c.TaxiShare == 1 {
@@ -61,6 +68,38 @@ func (s *Simulation) advanceSharedDemand() {
 	d.Generate(s.clock.Time, len(stops))
 	for _, j := range d.Journeys {
 		if j.State != "queued" {
+			continue
+		}
+		if !j.Prepared {
+			j.DepartAt = s.clock.Time
+			if j.Mode == "metro" {
+				pairs := s.metro.ServedPairs()
+				if len(pairs) == 0 {
+					continue
+				}
+				pair := pairs[d.Choose(len(pairs))]
+				j.Origin, j.Destination = pair[0], pair[1]
+			}
+			j.Prepared = true
+		}
+		if c := s.algorithm.view.Config.Demand; c.ID != "" && c.ID != "native" && !j.Ready {
+			continue
+		}
+		if j.DepartAt > s.clock.Time {
+			continue
+		}
+		if j.Mode == "metro" {
+			pairs := s.metro.ServedPairs()
+			if len(pairs) == 0 {
+				continue
+			}
+			pair := [2]int{j.Origin, j.Destination}
+			if s.metro.AddJourney(pair[0], pair[1], j.ID) {
+				j.Origin = pair[0]
+				j.Destination = pair[1]
+				j.Entity = j.ID
+				j.State = "active"
+			}
 			continue
 		}
 		from, to := stops[j.Origin%len(stops)], stops[j.Destination%len(stops)]
@@ -119,4 +158,40 @@ func (s *Simulation) removeFinishedPrivateCars() {
 		}
 	}
 	s.people = keep
+}
+
+// auditDemand verifies the operational ledger against real executors, not just totals.
+func (s *Simulation) auditDemand() demand.Summary {
+	summary := s.demandStream.Summary()
+	linked := map[int]int{}
+	for _, p := range s.people {
+		if p.journeyID > 0 && p.state != "arrived" {
+			linked[p.journeyID]++
+		}
+	}
+	if s.taxi != nil {
+		for _, o := range s.taxi.orders {
+			if o.JourneyID > 0 && o.State != "Completed" && o.State != "Cancelled" {
+				linked[o.JourneyID]++
+			}
+		}
+	}
+	for id, n := range s.metro.ActiveJourneys() {
+		linked[id] += n
+	}
+	for _, j := range s.demandStream.Journeys {
+		expected := 0
+		if j.State == "active" {
+			expected = 1
+		}
+		if linked[j.ID] != expected {
+			summary.Errors = append(summary.Errors, fmt.Sprintf("journey %d has %d executor tasks, expected %d", j.ID, linked[j.ID], expected))
+		}
+		delete(linked, j.ID)
+	}
+	if len(linked) > 0 {
+		summary.Errors = append(summary.Errors, "orphan executor tasks")
+	}
+	summary.Conserved = summary.Conserved && len(summary.Errors) == 0
+	return summary
 }

@@ -75,3 +75,5 @@
 #settings-panel section .select-control input,#settings-panel section .select-control select{width:48%;min-width:100px;box-sizing:border-box}
 #settings-panel section p{font:13px/1.5 "Times New Roman",serif;color:#aaa}
 #settings-panel .taxi-advanced{margin-top:24px}
+
+#shared-summary { white-space: pre-line; }

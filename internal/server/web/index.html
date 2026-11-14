@@ -19,7 +19,7 @@
       <div class="settings-body">
       <div class="settings-map-grid">
         <label class="select-control preset-control">Map<select id="map-preset" aria-label="Map preset" disabled><option>Loading maps…</option></select></label>
-        <label class="select-control">Demand mix<select id="simulation-mode"><option value="traffic">Traffic</option><option value="taxi">Taxi</option><option value="mixed">Road + Taxi</option></select></label>
+        <label class="select-control">Demand mix<select id="simulation-mode"><option value="traffic">Traffic</option><option value="taxi">Taxi</option><option value="mixed">Road + Taxi + Metro</option></select></label>
         <label class="select-control">Layers<select id="layer-filter" aria-label="Map layers"><option value="all">All levels</option><option value="specified">Specified level</option></select></label>
         <label class="select-control">Level<select id="layer-index" aria-label="Specified level" disabled><option value="-1">-1 - Metro</option><option value="0" selected>0 - Ground</option></select></label>
       </div>
@@ -47,10 +47,15 @@
         <h3>Shared travel demand</h3>
         <label class="select-control">Trips per minute<input id="shared-rate" type="number" min="0" max="60" step="0.5" value="2"></label>
         <label class="range-control"><span>Taxi share <b id="shared-share-value">50%</b></span><input id="shared-share" type="range" min="0" max="100" step="5" value="50"></label>
+        <label class="select-control">Metro share (%)<input id="shared-metro" type="number" min="0" max="100" step="5" value="0"></label>
         <button id="shared-apply">Apply demand mix</button><p id="shared-summary" role="status"></p>
       </section>
-      <section><h3>Route and signal algorithms</h3>
-        <label class="select-control">Route planner<select id="route-algorithm"><option value="native">Native</option></select></label>
+      <section><h3>Experimental algorithms</h3>
+        <label class="select-control">Demand timing and destinations<select id="demand-algorithm"><option value="native">Native</option></select></label>
+<label class="select-control">Empty taxi supply<select id="supply-algorithm"><option value="native">Native</option></select></label>
+<label class="select-control">Road motion<select id="motion-algorithm"><option value="native">Native</option></select></label>
+<label class="select-control">Metro operation<select id="metro-algorithm"><option value="native">Native</option></select></label>
+<label class="select-control">Route planner<select id="route-algorithm"><option value="native">Native</option></select></label>
         <label class="select-control">Signal scheduler<select id="signal-algorithm"><option value="native">Native</option></select></label>
         <label class="select-control">Parameters (JSON)<textarea id="road-algorithm-parameters">{}</textarea></label>
         <button id="road-algorithm-apply">Apply algorithms</button><p id="road-algorithm-status" role="status"></p>

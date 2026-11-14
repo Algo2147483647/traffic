@@ -433,6 +433,9 @@ func (s *Simulation) advanceSubstep(dt float64) {
 	s.taxiMaintenance(dt)
 	s.removeFinishedPrivateCars()
 	s.metro.Advance(dt)
+	for _, id := range s.metro.DrainCompletedJourneys() {
+		s.finishJourney(id, false)
+	}
 	s.clock.Tick++
 	s.stamp.World++
 	s.bindJournal()
@@ -703,6 +706,7 @@ func (s *Simulation) resetLocked(population int) {
 	}
 	if s.demandStream != nil {
 		s.demandStream = demand.New(s.demandStream.Config, 0)
+		s.metro.UseSharedDemand()
 	}
 	s.cancelAlgorithms()
 	s.stamp.Run++
@@ -1001,7 +1005,7 @@ func (s *Simulation) Snapshot() Snapshot {
 		snapshot.Mode = "traffic"
 	}
 	if s.demandStream != nil {
-		d := s.demandStream.Summary()
+		d := s.auditDemand()
 		snapshot.Demand = &d
 	}
 	if s.taxi != nil {

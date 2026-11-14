@@ -1,5 +1,9 @@
 # External route/signal algorithms and shared demand
 
+For the current three-mode source and additional runtime/scenario capabilities, see
+[three-mode execution and extensions](three-mode-algorithms.md). The route/signal
+protocol below remains compatible.
+
 ## Use in Settings
 
 - **Walking speed:** 0.3-3 m/s, initially 1.4. Vehicle speed is constrained by the

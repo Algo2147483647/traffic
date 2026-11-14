@@ -15,6 +15,10 @@ type AlgorithmChoice struct {
 	Parameters map[string]float64 `json:"parameters"`
 }
 type AlgorithmConfig struct {
+	Demand AlgorithmChoice `json:"demand"`
+	Supply AlgorithmChoice `json:"supply"`
+	Motion AlgorithmChoice `json:"motion"`
+	Metro  AlgorithmChoice `json:"metro"`
 	Route  AlgorithmChoice `json:"route"`
 	Signal AlgorithmChoice `json:"signal"`
 }
@@ -63,13 +67,15 @@ type algorithmResult struct {
 	signals  []signalTask
 }
 type algorithmRuntime struct {
-	view      AlgorithmView
-	cancel    context.CancelFunc
-	pending   chan algorithmResult
-	remaining int
-	next      uint64
-	request   uint64
-	cursor    int
+	view        AlgorithmView
+	cancel      context.CancelFunc
+	pending     chan algorithmResult
+	remaining   int
+	next        uint64
+	request     uint64
+	cursor      int
+	motion      map[int]motionProposal
+	motionUntil uint64
 }
 
 func (s *Simulation) cancelAlgorithms() {
@@ -80,9 +86,11 @@ func (s *Simulation) cancelAlgorithms() {
 	s.algorithm.remaining = 0
 	s.algorithm.view.Pending = false
 	s.algorithm.next = 0
+	s.algorithm.motion = nil
+	s.metro.ClearControls()
 }
 func (s *Simulation) setAlgorithms(c AlgorithmConfig) error {
-	for cap, choice := range map[string]AlgorithmChoice{"route": c.Route, "signal": c.Signal} {
+	for cap, choice := range map[string]AlgorithmChoice{"route": c.Route, "signal": c.Signal, "demand": c.Demand, "supply": c.Supply, "motion": c.Motion, "metro": c.Metro} {
 		if choice.ID != "" && choice.ID != "native" {
 			m, ok := algorithms.Lookup(choice.ID)
 			if !ok || m.Capability != cap {
@@ -150,6 +158,9 @@ func (s *Simulation) advanceAlgorithmsLocked() bool {
 		if len(tasks) > 0 {
 			jobs = append(jobs, work{cap: "signal", choice: c, signals: tasks, payload: map[string]any{"tasks": tasks}})
 		}
+	}
+	for _, extra := range s.extensionJobs() {
+		jobs = append(jobs, work{cap: extra.cap, choice: extra.choice, payload: extra.payload})
 	}
 	if len(jobs) == 0 {
 		a.next = s.clock.Tick + 100
@@ -358,7 +369,16 @@ func (s *Simulation) commitAlgorithm(result algorithmResult) {
 			}
 		}
 	}
+	if err == nil && result.input.Capability != "route" && result.input.Capability != "signal" {
+		err = s.commitExtension(result)
+	}
+	if err != nil && result.input.Capability == "demand" && result.input.Stamp == s.stamp && result.input.Tick == s.clock.Tick {
+		s.releaseDemandBatch(result.input.Payload)
+	}
 	if err != nil {
+		if result.input.Capability == "motion" {
+			a.motion = nil
+		}
 		if result.input.Capability == "signal" {
 			for _, r := range s.signals {
 				r.externalUntil = 0

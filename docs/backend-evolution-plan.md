@@ -2,8 +2,9 @@
 
 This plan supersedes the ordering in the earlier implementation audit. Existing
 SI units, 50 ms physics, compact interchanges, lane-path expansion and single-order
-taxi service are retained. Road/taxi mixed demand and the Stage 4 metro runtime
-are implemented; unified road/taxi/metro demand remains Stage 5. Adding interfaces alone does not complete a stage.
+taxi service are retained. Road/taxi/metro shared demand and the executable algorithm extensions are now
+implemented. The dated checkpoint below records their scope; experiment replay
+and checkpoint/resume remain future work. Adding interfaces alone does not complete a stage.
 
 ## Settings baseline delivered with this plan
 
@@ -214,8 +215,8 @@ Demand rate, ratio, taxi fleet and dispatch settings update live. Road/Taxi/Mixe
 selection changes future demand shares without resetting time, run ID, vehicle
 positions or accepted orders. Existing legacy ordinary trips finish naturally when
 the shared stream is enabled; they are not retroactively counted as new journeys.
-Only an explicit Reset or map replacement starts a new run. Mixed metro demand is
-still unavailable; the next stage is the real metro executor.
+Only an explicit Reset or map replacement starts a new run. At this historical Stage 3 checkpoint, mixed metro demand was unavailable.
+The Stage 5 checkpoint below supersedes that limitation.
 
 Walking speed is configurable from 0.3 to 3 m/s (default 1.4). Driving limits are
 read from each road, not the old simulation-wide speed field. Presets now use at
@@ -250,7 +251,7 @@ It includes real timetable gates, bounded motion, section/block occupancy,
 station-throat and platform reservations, reversal, FIFO destination-aware
 passenger service and capacity enforcement. It is visible and configurable in the
 running desktop. See [metro runtime](metro-runtime.md) for geometry, controls and
-conservative reservation limits. Stage 5's shared three-mode source is not enabled.
+conservative reservation limits. The later Stage 5 checkpoint adds shared three-mode demand.
 
 ### Stage 5: three-mode demand and metro strategy execution
 
@@ -324,3 +325,16 @@ delivers useful running capabilities earlier than expanding every interface firs
 This document records the staged plan and implementation checkpoints. See
 `metro-runtime.md` for the current executable metro scope and remaining limits;
 completed checkpoints do not imply that all six stages are complete.
+
+## Stage 5 and algorithm-extension checkpoint (2026-11-15)
+
+The shared stream now executes car, taxi and metro journeys, with per-mode state
+counts and a live executor-to-journey conservation audit. Mixed mode selects
+40/30/30 on metro-equipped maps. No mode-share change resets accepted tasks.
+
+Demand OD, idle taxi supply, batched motion/merge preference, metro departure/speed,
+and scenario geometry/phase workers are connected to production invocation points.
+Each uses bounded execution and host-owned validation. See
+[three-mode demand and extensions](three-mode-algorithms.md) for exact contracts,
+examples, failure behavior and verification. The experiment replay/checkpoint and
+generalized multi-seed runner items in Stage 6 remain subsequent work.

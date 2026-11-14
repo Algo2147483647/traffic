@@ -114,7 +114,11 @@ func NewNetwork(l *Layout, c Config) *Runtime {
 		for i := 1; i < len(r.chain); i++ {
 			r.chain[i] = r.chain[i-1] + math.Hypot(spec.Route[i].X-spec.Route[i-1].X, spec.Route[i].Y-spec.Route[i-1].Y)
 		}
+		for i := range r.platforms {
+			r.platforms[i] = [2]int{}
+		}
 		for _, t := range r.trains {
+			r.platforms[t.Station][r.platform(t.Station, t.Direction)] = t.ID
 			t.Length = float64(t.carCount) * l.CarLength
 			t.routeDistance = spec.Stops[t.Station][directionIndex(t.Direction)]
 			t.Position = r.pose(t.routeDistance).Position
@@ -169,6 +173,14 @@ func (r *Runtime) turn(t *train, dt float64) {
 	t.Distance += step
 	t.routeDistance += step
 	t.Position = r.pose(t.routeDistance).Position
+	// Once the tail clears the arrival berth, an incoming train may use it.
+	// The departure berth remains reserved for this entire terminal circuit.
+	if t.Distance >= t.Length {
+		p := r.platform(t.Station, -t.Direction)
+		if r.platforms[t.Station][p] == t.ID {
+			r.platforms[t.Station][p] = 0
+		}
+	}
 	if t.Authority-t.Distance < 1e-5 {
 		t.routeDistance = r.spec.Stops[t.Station][directionIndex(t.Direction)]
 		t.Position = r.pose(t.routeDistance).Position

@@ -57,6 +57,12 @@ func (s *Simulation) reserveFlowLocked() {
 	// Stable nearest-to-entry priority avoids dependence on slice/map iteration.
 	sort.Slice(candidates, func(i, j int) bool {
 		a, b := candidates[i], candidates[j]
+		if s.clock.Tick < s.algorithm.motionUntil {
+			pa, pb := s.algorithm.motion[a.id].MergePriority, s.algorithm.motion[b.id].MergePriority
+			if pa != pb {
+				return pa > pb
+			}
+		}
 		wa, wb := s.graph.Ways[a.wayID], s.graph.Ways[b.wayID]
 		da, db := math.Inf(1), math.Inf(1)
 		if wa != nil {

@@ -10,3 +10,6 @@ settings through the common command boundary. Snapshots expose per-car passenger
 physical car poses, train speeds and positions, station queues, reservations,
 closed track geometry and numeric layers. Preset-specific materials live only in
 `example/Map1` and `example/Map2` JSON files.
+
+Shared journey IDs, passenger/task accounting, short-horizon external train controls
+and terminal berth release are described in [three-mode execution](three-mode-algorithms.md).

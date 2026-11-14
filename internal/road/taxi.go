@@ -147,7 +147,12 @@ func (s *Simulation) setModeLocked(mode string, c TaxiConfig) error {
 	if first {
 		seed = c.Seed
 	}
-	if err := s.setDemand(demand.Config{Rate: rate, TaxiShare: share, Seed: seed}); err != nil {
+	metroShare := 0.0
+	if mode == "mixed" && len(s.metro.ServedPairs()) > 0 {
+		share = .3
+		metroShare = .3
+	}
+	if err := s.setDemand(demand.Config{Rate: rate, TaxiShare: share, MetroShare: metroShare, Seed: seed}); err != nil {
 		return err
 	}
 	if first && mode != "traffic" {

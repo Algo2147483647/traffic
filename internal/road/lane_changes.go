@@ -280,7 +280,11 @@ func (s *Simulation) advanceRoadVehiclesLocked(dt float64) {
 		}
 		way := s.graph.Ways[person.wayID]
 		active = append(active, person)
-		constraints[person] = laneSpeedConstraint{speed: s.policySpeed(way.SpeedLimit), safety: math.Inf(1)}
+		desired := s.policySpeed(way.SpeedLimit)
+		if proposal, ok := s.algorithm.motion[person.id]; ok && s.clock.Tick < s.algorithm.motionUntil {
+			desired = math.Min(desired, proposal.Speed)
+		}
+		constraints[person] = laneSpeedConstraint{speed: desired, safety: math.Inf(1)}
 		for lane := 0; lane < way.Lanes; lane++ {
 			if occupiesLane(person, lane) {
 				key := fmt.Sprintf("%s:%d", person.wayID, lane)

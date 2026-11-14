@@ -130,11 +130,11 @@ async function createWindow() {
         for(let i=0;i<150;i++){snap=await control({action:'step',delta:1});if(snap.taxi.created>beforeWorkerOrders&&snap.taxi.orders.some(o=>o.state==='Assigned'))break;if(snap.taxi.last_error)throw Error(snap.taxi.last_error);await wait(30);}
         if(!snap.taxi.orders.some(o=>o.state==='Assigned'))throw Error('Python worker did not assign');
         const beforeMixTime=snap.time,beforeMixRun=snap.kernel.run;
-        await control({action:'set_demand',demand:{trips_per_minute:30,taxi_share:.5}});
+        await control({action:'set_demand',demand:{trips_per_minute:30,taxi_share:.3,metro_share:.3}});
         snap=await get('/api/snapshot');if(snap.time!==beforeMixTime||snap.kernel.run!==beforeMixRun)throw Error('Mix reset active run');
         for(let i=0;i<80;i++){snap=await control({action:'step',delta:2});if(snap.people.some(p=>p.journey_id)&&snap.demand.car_trips>0&&snap.demand.taxi_trips>0)break;await wait(20);}
         if(!snap.people.some(p=>p.journey_id)||!snap.taxi.vehicles.length)throw Error('Both modes did not coexist');
-        if(snap.demand.generated!==snap.demand.queued+snap.demand.active+snap.demand.completed+snap.demand.cancelled)throw Error('Demand conservation failed');
+        if(!snap.demand.conserved||snap.demand.generated!==snap.demand.queued+snap.demand.active+snap.demand.completed+snap.demand.cancelled)throw Error('Demand conservation failed');
         await control({action:'set_walk_speed',walk_speed_mps:1.8});
         const available=await get('/api/algorithms/workers');if(!available.some(a=>a.id==='python.route')||!available.some(a=>a.id==='python.signal'))throw Error('Algorithm manifests missing');
         await control({action:'set_algorithms',algorithms:{route:{id:'python.route',parameters:{prefer_alternative:1}},signal:{id:'python.signal',parameters:{}}}});
@@ -152,10 +152,12 @@ async function createWindow() {
       for(let i=0;i<50&&(await get('/api/snapshot')).metro.config.headway_s!==60;i++)await wait(50);
       const configured=(await get('/api/snapshot')).metro.config;
       if(configured.cars!==6||configured.max_speed_kmh!==300||configured.headway_s!==60)throw Error('Metro UI controls failed');
+      await control({action:'set_demand',demand:{trips_per_minute:12,taxi_share:.3,metro_share:.3}});
       let metroSnap;
-      for(let i=0;i<200;i++){metroSnap=await control({action:'step',delta:4});if(metroSnap.metro.completed>=2&&metroSnap.metro.departures>=4)break;}
+      for(let i=0;i<2000;i++){metroSnap=await control({action:'step',delta:4});if(metroSnap.metro.completed>=2&&metroSnap.metro.departures>=4)break;await wait(20);}
       const metroResult=metroSnap.metro;
-      if(metroResult.completed<2||metroResult.departures<4||metroResult.generated!==metroResult.waiting+metroResult.onboard+metroResult.completed)throw Error('Metro did not deliver conserved passengers');
+      if(!metroSnap.demand.conserved||metroSnap.demand.metro_trips===0)throw Error('Three mode accounting failed');
+      if(metroResult.completed<2||metroResult.departures<4||metroResult.generated!==metroResult.waiting+metroResult.onboard+metroResult.completed)throw Error('Metro did not deliver conserved passengers: '+JSON.stringify({time:metroSnap.time,generated:metroResult.generated,waiting:metroResult.waiting,onboard:metroResult.onboard,completed:metroResult.completed,departures:metroResult.departures}));
       if(metroResult.trains.some(t=>t.car_poses.length!==6||t.car_length_m!==22.8||t.car_width_m!==3||t.passengers>t.capacity||t.cars.length!==6||Math.abs(t.length_m-136.8)>1e-6||t.cars.reduce((a,b)=>a+b,0)!==t.passengers||t.cars.some((n,i)=>n>t.car_capacities[i])||t.speed_mps>300/3.6))throw Error('Metro car manifest or speed invalid');
       if(preset==='preset-1'&&(metroResult.lines.length!==3||metroResult.stations.length!==15||metroResult.trains.length!==6))throw Error('Radial metro missing');
       const levelInput=document.querySelector('#metro-levels select');levelInput.value='-4';document.querySelector('#metro-apply').click();

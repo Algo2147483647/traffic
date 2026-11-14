@@ -34,6 +34,7 @@ type StationView struct {
 	Waiting  int    `json:"waiting"`
 }
 type Passenger struct {
+	JourneyID   int
 	Car         int
 	ID          int
 	Destination int
@@ -101,6 +102,8 @@ type View struct {
 	Departures    int           `json:"departures"`
 }
 type train struct {
+	control       Control
+	controlUntil  float64
 	needsLoop     bool
 	routeDistance float64
 	TrainView
@@ -131,6 +134,8 @@ type Runtime struct {
 	lengths                          []float64
 	rng                              *rand.Rand
 	nextArrival                      float64
+	finishedJourneys                 []int
+	externalDemand                   bool
 	generated, completed, departures int
 }
 
@@ -237,7 +242,7 @@ func (r *Runtime) configureCars(t *train) {
 	}
 }
 func (r *Runtime) platform(st, dir int) int {
-	if st == 0 || st == len(r.stations)-1 || dir == 1 {
+	if (r.spec == nil && (st == 0 || st == len(r.stations)-1)) || dir == 1 {
 		return 0
 	}
 	return 1
@@ -249,12 +254,15 @@ func (r *Runtime) scheduleArrival() {
 	}
 }
 func (r *Runtime) AddPassenger(origin, destination int) bool {
+	return r.AddJourney(origin, destination, 0)
+}
+func (r *Runtime) AddJourney(origin, destination, journey int) bool {
 	if len(r.lines) > 0 {
 		offset := 0
 		for _, line := range r.lines {
 			n := len(line.stations)
 			if origin >= offset && origin < offset+n && destination >= offset && destination < offset+n {
-				return line.AddPassenger(origin-offset, destination-offset)
+				return line.AddJourney(origin-offset, destination-offset, journey)
 			}
 			offset += n
 		}
@@ -269,7 +277,7 @@ func (r *Runtime) AddPassenger(origin, destination int) bool {
 	if destination < origin {
 		d = 1
 	}
-	r.queues[origin][d] = append(r.queues[origin][d], Passenger{ID: r.generated, Destination: destination})
+	r.queues[origin][d] = append(r.queues[origin][d], Passenger{ID: r.generated, Destination: destination, JourneyID: journey})
 	return true
 }
 func (r *Runtime) Advance(dt float64) {
@@ -293,7 +301,7 @@ func (r *Runtime) Advance(dt float64) {
 		}
 		return
 	}
-	for r.time >= r.nextArrival {
+	for !r.externalDemand && r.time >= r.nextArrival {
 		a := r.rng.Intn(len(r.stations))
 		b := r.rng.Intn(len(r.stations) - 1)
 		if b >= a {
@@ -323,6 +331,9 @@ func (r *Runtime) Advance(dt float64) {
 				}
 			}
 			if idx >= 0 {
+				if id := t.onboard[idx].JourneyID; id > 0 {
+					r.finishedJourneys = append(r.finishedJourneys, id)
+				}
 				t.onboard = append(t.onboard[:idx], t.onboard[idx+1:]...)
 				r.completed++
 				r.configureCars(t)
@@ -361,6 +372,9 @@ func (r *Runtime) Advance(dt float64) {
 			alighting = alighting || p.Destination == t.Station
 		}
 		t.Departure = math.Max(t.scheduled, t.arrived+r.config.Dwell)
+		if r.time < t.controlUntil {
+			t.Departure = math.Max(t.Departure, t.control.DepartAfter)
+		}
 		t.Delay = math.Max(0, r.time-t.Departure)
 		d := 0
 		if t.Direction < 0 {
@@ -369,6 +383,11 @@ func (r *Runtime) Advance(dt float64) {
 		boardingDone := len(r.queues[t.Station][d]) == 0 || len(t.onboard) >= t.Capacity
 		if r.time >= t.Departure && !alighting && boardingDone {
 			if t.needsLoop {
+				exitPlatform := r.platform(t.Station, t.Direction)
+				if owner := r.platforms[t.Station][exitPlatform]; owner != 0 && owner != t.ID {
+					continue
+				}
+				r.platforms[t.Station][exitPlatform] = t.ID
 				t.State = "turning"
 				t.Speed = 0
 				t.Distance = 0
@@ -420,6 +439,9 @@ func (r *Runtime) move(t *train, dt float64) {
 	remaining := math.Max(0, t.Authority-t.Distance)
 	brake := 1.0
 	target := math.Min(r.config.MaxSpeed/3.6, math.Sqrt(brake*brake*dt*dt+2*brake*remaining)-brake*dt)
+	if r.time < t.controlUntil {
+		target = math.Min(target, t.control.Speed)
+	}
 	t.Speed = math.Max(0, math.Min(t.Speed+dt, math.Max(t.Speed-brake*dt, target)))
 	t.Speed = math.Min(t.Speed, remaining/dt)
 	t.Distance += t.Speed * dt
@@ -558,4 +580,69 @@ func (r *Runtime) Snapshot() View {
 		v.Lines[0].TunnelOuter = r.layout.TunnelOuter
 	}
 	return v
+}
+
+// UseSharedDemand stops only future local arrivals, preserving all existing riders.
+func (r *Runtime) UseSharedDemand() {
+	r.externalDemand = true
+	for _, line := range r.lines {
+		line.UseSharedDemand()
+	}
+}
+func (r *Runtime) DrainCompletedJourneys() []int {
+	ids := r.finishedJourneys
+	r.finishedJourneys = nil
+	for _, line := range r.lines {
+		ids = append(ids, line.DrainCompletedJourneys()...)
+	}
+	return ids
+}
+
+// ServedPairs enumerates directed, same-line station pairs in stable order.
+func (r *Runtime) ServedPairs() [][2]int {
+	pairs := [][2]int{}
+	offset := 0
+	if len(r.lines) == 0 {
+		for a := range r.stations {
+			for b := range r.stations {
+				if a != b {
+					pairs = append(pairs, [2]int{a, b})
+				}
+			}
+		}
+		return pairs
+	}
+	for _, line := range r.lines {
+		for _, pair := range line.ServedPairs() {
+			pairs = append(pairs, [2]int{pair[0] + offset, pair[1] + offset})
+		}
+		offset += len(line.stations)
+	}
+	return pairs
+}
+
+func (r *Runtime) ActiveJourneys() map[int]int {
+	out := map[int]int{}
+	for _, line := range r.lines {
+		for id, n := range line.ActiveJourneys() {
+			out[id] += n
+		}
+	}
+	for _, q := range r.queues {
+		for _, direction := range q {
+			for _, p := range direction {
+				if p.JourneyID > 0 {
+					out[p.JourneyID]++
+				}
+			}
+		}
+	}
+	for _, t := range r.trains {
+		for _, p := range t.onboard {
+			if p.JourneyID > 0 {
+				out[p.JourneyID]++
+			}
+		}
+	}
+	return out
 }

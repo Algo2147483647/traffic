@@ -54,7 +54,7 @@ var registry = struct {
 }{items: map[string]Manifest{}}
 
 func Register(m Manifest) error {
-	if m.ID == "" || m.AlgorithmVersion == "" || m.ContractVersion != 1 || (m.Capability != "route" && m.Capability != "signal") || len(m.Command) == 0 || m.Timeout < 50 || m.Timeout > 10000 {
+	if m.ID == "" || m.AlgorithmVersion == "" || m.ContractVersion != 1 || !validCapability(m.Capability) || len(m.Command) == 0 || m.Timeout < 50 || m.Timeout > 10000 {
 		return fmt.Errorf("invalid algorithm manifest")
 	}
 	registry.Lock()
@@ -166,4 +166,12 @@ func Invoke(parent context.Context, in Request) (Response, error) {
 		return r, fmt.Errorf("mismatched result envelope")
 	}
 	return r, nil
+}
+
+func validCapability(c string) bool {
+	switch c {
+	case "route", "signal", "demand", "supply", "motion", "metro", "geometry", "phases":
+		return true
+	}
+	return false
 }

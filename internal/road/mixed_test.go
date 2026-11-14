@@ -62,3 +62,50 @@ func TestMixedDemandPreservesTasksAndConservesTrips(t *testing.T) {
 		t.Fatalf("both modes did not finish: %+v taxi=%d", d, s.taxi.completed)
 	}
 }
+
+func TestThreeModeDemandRealTripsAndAccounting(t *testing.T) {
+	s := New(taxiGraph(t))
+	defer s.Close()
+	s.people = nil
+	c := DefaultTaxiConfig()
+	c.Fleet = 8
+	c.Dwell = .2
+	c.MaxWait = 3600
+	s.startTaxiLive(c)
+	if err := s.setDemand(demand.Config{Rate: 4, TaxiShare: .3, MetroShare: .3, Seed: 44}); err != nil {
+		t.Fatal(err)
+	}
+	initial := s.stamp.Run
+	for tick := 0; tick < 48000; tick++ {
+		s.Step(.05)
+		if tick%100 == 0 {
+			a := s.auditDemand()
+			if !a.Conserved {
+				t.Fatalf("tick %d: %+v", tick, a)
+			}
+		}
+		if tick == 1000 {
+			c := s.demandStream.Config
+			c.Rate = 3
+			if e := s.setDemand(c); e != nil {
+				t.Fatal(e)
+			}
+			if s.stamp.Run != initial {
+				t.Fatal("mix reset run")
+			}
+		}
+	}
+	a := s.auditDemand()
+	for _, mode := range []string{"car", "taxi", "metro"} {
+		if a.Modes[mode].Completed == 0 {
+			t.Fatalf("no real %s completions: %+v", mode, a)
+		}
+	}
+	if !a.Conserved {
+		t.Fatal(a)
+	}
+	s.Reset(1)
+	if !s.auditDemand().Conserved {
+		t.Fatal("reset accounting")
+	}
+}

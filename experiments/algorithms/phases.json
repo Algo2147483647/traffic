@@ -1,0 +1,12 @@
+{
+  "id": "python.phases",
+  "name": "Python phases experiment",
+  "capability": "phases",
+  "algorithm_version": "1",
+  "contract_version": 1,
+  "command": [
+    "python",
+    "extensions.py"
+  ],
+  "wall_timeout_ms": 1500
+}
