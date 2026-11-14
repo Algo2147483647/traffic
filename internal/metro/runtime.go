@@ -77,13 +77,15 @@ type Route struct {
 	Owner   int `json:"owner"`
 }
 type LineView struct {
-	Layer       int     `json:"layer"`
-	Track       []Point `json:"track"`
-	TunnelWidth float64 `json:"tunnel_inner_diameter_m"`
-	TunnelOuter float64 `json:"tunnel_outer_diameter_m"`
-	ID          int     `json:"id"`
-	Name        string  `json:"name"`
-	Stations    []int   `json:"stations"`
+	ReverseTrack []Point `json:"reverse_track,omitempty"`
+	Circular     bool    `json:"circular"`
+	Layer        int     `json:"layer"`
+	Track        []Point `json:"track"`
+	TunnelWidth  float64 `json:"tunnel_inner_diameter_m"`
+	TunnelOuter  float64 `json:"tunnel_outer_diameter_m"`
+	ID           int     `json:"id"`
+	Name         string  `json:"name"`
+	Stations     []int   `json:"stations"`
 }
 type View struct {
 	CrossingOwner int           `json:"crossing_owner"`
@@ -116,12 +118,13 @@ type train struct {
 }
 type crossingGate struct{ owner int }
 type Runtime struct {
-	layout *Layout
-	spec   *LineSpec
-	chain  []float64
-	lines  []*Runtime
-	gate   *crossingGate
-	lineID int
+	layout       *Layout
+	spec         *LineSpec
+	reverseChain []float64
+	chain        []float64
+	lines        []*Runtime
+	gate         *crossingGate
+	lineID       int
 
 	config                           Config
 	time                             float64
@@ -274,7 +277,7 @@ func (r *Runtime) AddJourney(origin, destination, journey int) bool {
 	}
 	r.generated++
 	d := 0
-	if destination < origin {
+	if (!r.circular() && destination < origin) || (r.circular() && (origin-destination+len(r.stations))%len(r.stations) < (destination-origin+len(r.stations))%len(r.stations)) {
 		d = 1
 	}
 	r.queues[origin][d] = append(r.queues[origin][d], Passenger{ID: r.generated, Destination: destination, JourneyID: journey})
@@ -411,10 +414,19 @@ func (r *Runtime) Advance(dt float64) {
 }
 func (r *Runtime) reserve(t *train) bool {
 	a, b := t.Station, t.Station+t.Direction
+	if r.circular() {
+		b = (b + len(r.stations)) % len(r.stations)
+	}
 	if b < 0 || b >= len(r.stations) {
 		return false
 	}
 	seg := min(a, b)
+	if r.circular() {
+		seg = a
+		if t.Direction < 0 {
+			seg = len(r.stations) + b
+		}
+	}
 	p := r.platform(b, t.Direction)
 	if r.segments[seg] != 0 || r.platforms[b][p] != 0 || r.routes[a] != 0 || r.routes[b] != 0 {
 		return false
@@ -450,7 +462,7 @@ func (r *Runtime) move(t *train, dt float64) {
 	a, b := r.stations[t.Station].Position, r.stations[t.Next].Position
 	t.Position = Point{a.X + (b.X-a.X)*fraction, a.Y + (b.Y-a.Y)*fraction}
 	if r.spec != nil {
-		t.Position = r.pose(t.routeDistance).Position
+		t.Position = r.directionPose(t.Direction, t.routeDistance).Position
 	}
 	if t.Distance >= t.Length {
 		if r.gate != nil && t.Station == r.crossing() && r.gate.owner == r.lineID*100+t.ID {
@@ -472,7 +484,7 @@ func (r *Runtime) move(t *train, dt float64) {
 	t.Position = r.stations[t.Station].Position
 	if r.spec != nil {
 		t.routeDistance = r.spec.Stops[t.Station][directionIndex(t.Direction)]
-		t.Position = r.pose(t.routeDistance).Position
+		t.Position = r.directionPose(t.Direction, t.routeDistance).Position
 	}
 	t.State = "dwelling"
 	t.Speed = 0
@@ -480,7 +492,7 @@ func (r *Runtime) move(t *train, dt float64) {
 	t.service = 0
 	t.segment = -1
 	t.Authority = 0
-	if t.Station == 0 || t.Station == len(r.stations)-1 {
+	if !r.circular() && (t.Station == 0 || t.Station == len(r.stations)-1) {
 		t.Direction = -t.Direction
 		if r.spec != nil {
 			t.needsLoop = true
@@ -490,6 +502,9 @@ func (r *Runtime) move(t *train, dt float64) {
 		t.scheduled = r.time + r.config.Dwell
 	}
 	t.Next = t.Station + t.Direction
+	if r.circular() {
+		t.Next = (t.Next + len(r.stations)) % len(r.stations)
+	}
 }
 func (r *Runtime) Snapshot() View {
 	if len(r.lines) > 0 {
@@ -518,7 +533,7 @@ func (r *Runtime) Snapshot() View {
 		}
 		if r.spec != nil {
 			for i := 0; i < t.carCount; i++ {
-				x.CarPoses = append(x.CarPoses, r.pose(t.routeDistance+(float64(t.carCount)/2-float64(i)-.5)*r.carLength()))
+				x.CarPoses = append(x.CarPoses, r.directionPose(t.Direction, t.routeDistance+(float64(t.carCount)/2-float64(i)-.5)*r.carLength()))
 			}
 		}
 		x.Cars = make([]int, t.carCount)
@@ -535,7 +550,7 @@ func (r *Runtime) Snapshot() View {
 		a, b := r.stations[t.Station].Position, r.stations[t.Next].Position
 		x.Heading = math.Atan2(b.Y-a.Y, b.X-a.X)
 		if r.spec != nil {
-			x.Heading = r.pose(t.routeDistance).Heading
+			x.Heading = r.directionPose(t.Direction, t.routeDistance).Heading
 		}
 		v.Trains = append(v.Trains, x)
 		v.Onboard += x.Passengers
@@ -551,6 +566,14 @@ func (r *Runtime) Snapshot() View {
 		for b := 0; b < 2; b++ {
 			start, end := float64(b)*L/2, float64(b+1)*L/2
 			block := Block{ID: fmt.Sprintf("B%d.%d", seg, b), From: seg, To: seg + 1, Start: start, End: end, Owner: r.segments[seg]}
+			if r.circular() {
+				n := len(r.stations)
+				block.From = seg % n
+				block.To = (seg + 1) % n
+				if seg >= n {
+					block.From, block.To = block.To, block.From
+				}
+			}
 			for _, t := range r.trains {
 				if t.segment != seg {
 					continue
@@ -576,6 +599,8 @@ func (r *Runtime) Snapshot() View {
 		v.Lines[0].Name = r.spec.Name
 		v.Lines[0].Layer = r.floor()
 		v.Lines[0].Track = r.spec.Route
+		v.Lines[0].ReverseTrack = r.spec.ReverseRoute
+		v.Lines[0].Circular = r.spec.Circular
 		v.Lines[0].TunnelWidth = r.layout.TunnelWidth
 		v.Lines[0].TunnelOuter = r.layout.TunnelOuter
 	}

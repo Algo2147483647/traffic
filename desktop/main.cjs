@@ -79,7 +79,7 @@ async function createWindow() {
       if (preset && ${JSON.stringify(process.env.TRAFFIC_SMOKE_DETAIL === '1')}) {
         const city=await get('/api/city');
         if(city.world_units_per_km!==1000)throw Error('Missing coordinate scale');
-        if(!drawnLabels.includes('X · km')||!drawnLabels.includes('Y · km')||!drawnLabels.includes('6 × 6 km'))throw Error('Missing kilometer rulers');
+        if(!drawnLabels.includes('X · km')||!drawnLabels.includes('Y · km')||(preset==='four-cell-interchanges'&&!drawnLabels.includes('6 × 6 km')))throw Error('Missing kilometer rulers');
         document.querySelector('#zoom-in-button').click();await wait(100);
         document.querySelector('#zoom-out-button').click();await wait(100);
         for(const group of city.interchanges){

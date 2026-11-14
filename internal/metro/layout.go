@@ -18,6 +18,8 @@ type Layout struct {
 	Lines        []LineSpec `json:"lines"`
 }
 type LineSpec struct {
+	Circular        bool         `json:"circular,omitempty"`
+	ReverseRoute    []Point      `json:"reverse_route,omitempty"`
 	ID              int          `json:"id"`
 	Name            string       `json:"name"`
 	Layer           int          `json:"layer"`
@@ -62,6 +64,9 @@ func (l *Layout) Validate() error {
 			return fmt.Errorf("invalid metro line %d", s.ID)
 		}
 		ids[s.ID] = true
+		if s.Circular && (len(s.ReverseRoute) < 4 || math.Hypot(s.ReverseRoute[0].X-s.ReverseRoute[len(s.ReverseRoute)-1].X, s.ReverseRoute[0].Y-s.ReverseRoute[len(s.ReverseRoute)-1].Y) > 1e-5) {
+			return fmt.Errorf("circular line needs closed reverse track")
+		}
 		if math.Hypot(s.Route[0].X-s.Route[len(s.Route)-1].X, s.Route[0].Y-s.Route[len(s.Route)-1].Y) > 1e-5 {
 			return fmt.Errorf("line %d route is not closed", s.ID)
 		}
@@ -70,14 +75,33 @@ func (l *Layout) Validate() error {
 				return fmt.Errorf("zero-length metro segment")
 			}
 		}
+		if s.Circular {
+			for i, p := range s.ReverseRoute {
+				if math.IsNaN(p.X) || math.IsNaN(p.Y) || math.IsInf(p.X, 0) || math.IsInf(p.Y, 0) {
+					return fmt.Errorf("nonfinite ring track")
+				}
+				if i > 0 && math.Hypot(p.X-s.ReverseRoute[i-1].X, p.Y-s.ReverseRoute[i-1].Y) < 1e-8 {
+					return fmt.Errorf("zero-length reverse track")
+				}
+			}
+			for i := 1; i < len(s.Stops); i++ {
+				if s.Stops[i][0] <= s.Stops[i-1][0] || (i > 1 && s.Stops[i][1] >= s.Stops[i-1][1]) {
+					return fmt.Errorf("invalid ring stop order")
+				}
+			}
+		}
 		total := routeLength(s.Route)
 		for i, st := range s.Stops {
-			for _, d := range st {
-				if d < 0 || d >= total {
+			for direction, d := range st {
+				limit := total
+				if s.Circular && direction == 1 {
+					limit = routeLength(s.ReverseRoute)
+				}
+				if math.IsNaN(d) || math.IsInf(d, 0) || d < 0 || d >= limit {
 					return fmt.Errorf("invalid station chainage")
 				}
 			}
-			if i > 0 && (st[0] <= s.Stops[i-1][0] || st[1] >= s.Stops[i-1][1]) {
+			if !s.Circular && i > 0 && (st[0] <= s.Stops[i-1][0] || st[1] >= s.Stops[i-1][1]) {
 				return fmt.Errorf("invalid directional stop order")
 			}
 		}
@@ -114,6 +138,9 @@ func NewNetwork(l *Layout, c Config) *Runtime {
 		for i := 1; i < len(r.chain); i++ {
 			r.chain[i] = r.chain[i-1] + math.Hypot(spec.Route[i].X-spec.Route[i-1].X, spec.Route[i].Y-spec.Route[i-1].Y)
 		}
+		if spec.Circular {
+			r.initCircular()
+		}
 		for i := range r.platforms {
 			r.platforms[i] = [2]int{}
 		}
@@ -121,7 +148,7 @@ func NewNetwork(l *Layout, c Config) *Runtime {
 			r.platforms[t.Station][r.platform(t.Station, t.Direction)] = t.ID
 			t.Length = float64(t.carCount) * l.CarLength
 			t.routeDistance = spec.Stops[t.Station][directionIndex(t.Direction)]
-			t.Position = r.pose(t.routeDistance).Position
+			t.Position = r.directionPose(t.Direction, t.routeDistance).Position
 		}
 		root.lines = append(root.lines, r)
 	}
@@ -151,18 +178,25 @@ func (r *Runtime) crossing() int {
 	}
 	return 2
 }
-func (r *Runtime) pose(d float64) CarPose {
-	total := r.chain[len(r.chain)-1]
+func (r *Runtime) pose(d float64) CarPose { return samplePose(r.spec.Route, r.chain, d) }
+func (r *Runtime) directionPose(direction int, d float64) CarPose {
+	if r.circular() && direction < 0 {
+		return samplePose(r.spec.ReverseRoute, r.reverseChain, d)
+	}
+	return r.pose(d)
+}
+func samplePose(route []Point, chain []float64, d float64) CarPose {
+	total := chain[len(chain)-1]
 	d = math.Mod(d, total)
 	if d < 0 {
 		d += total
 	}
-	i := sort.Search(len(r.chain), func(i int) bool { return r.chain[i] >= d })
+	i := sort.Search(len(chain), func(i int) bool { return chain[i] >= d })
 	if i == 0 {
 		i = 1
 	}
-	a, b := r.spec.Route[i-1], r.spec.Route[i]
-	f := (d - r.chain[i-1]) / (r.chain[i] - r.chain[i-1])
+	a, b := route[i-1], route[i]
+	f := (d - chain[i-1]) / (chain[i] - chain[i-1])
 	return CarPose{Point{a.X + (b.X-a.X)*f, a.Y + (b.Y-a.Y)*f}, math.Atan2(b.Y-a.Y, b.X-a.X)}
 }
 func (r *Runtime) turn(t *train, dt float64) {
@@ -172,7 +206,7 @@ func (r *Runtime) turn(t *train, dt float64) {
 	step := math.Min(remaining, t.Speed*dt)
 	t.Distance += step
 	t.routeDistance += step
-	t.Position = r.pose(t.routeDistance).Position
+	t.Position = r.directionPose(t.Direction, t.routeDistance).Position
 	// Once the tail clears the arrival berth, an incoming train may use it.
 	// The departure berth remains reserved for this entire terminal circuit.
 	if t.Distance >= t.Length {
@@ -183,7 +217,7 @@ func (r *Runtime) turn(t *train, dt float64) {
 	}
 	if t.Authority-t.Distance < 1e-5 {
 		t.routeDistance = r.spec.Stops[t.Station][directionIndex(t.Direction)]
-		t.Position = r.pose(t.routeDistance).Position
+		t.Position = r.directionPose(t.Direction, t.routeDistance).Position
 		t.State = "dwelling"
 		t.needsLoop = false
 		t.Speed = 0

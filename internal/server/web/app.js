@@ -219,7 +219,7 @@
     for(const line of [...m.lines].sort((a,b)=>a.layer-b.layer)) {
       if(!line.track?.length||!levelVisible(line.layer))continue;
       const color=colors[line.id%colors.length];
-      const trace=()=>{ctx.beginPath();line.track.forEach((v,i)=>{const p=screen(v);i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});};
+      const trace=()=>{ctx.beginPath();for(const track of [line.track,line.reverse_track||[]])track.forEach((v,i)=>{const p=screen(v);i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});};
       ctx.lineJoin="round";ctx.lineCap="round";
       trace();ctx.strokeStyle=color;ctx.lineWidth=line.tunnel_outer_diameter_m*scale;ctx.stroke();
       trace();ctx.strokeStyle="#080808";ctx.lineWidth=line.tunnel_inner_diameter_m*scale;ctx.stroke();

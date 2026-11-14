@@ -27,7 +27,7 @@ test('bundled engine authenticates, simulates, switches presets, streams, and ex
   await control({ action: 'step', delta: 0.05 });
   assert.ok((await get('/api/snapshot')).time > paused.time);
   const presets = await get('/api/presets');
-  assert.equal(presets.presets.length, 2);
+  assert.equal(presets.presets.length, 3);
   await control({ action: 'set_preset', preset_id: 'four-cell-interchanges' });
   assert.equal((await get('/api/city')).name, 'Four-Cell Interchange Network');
   const abort = new AbortController();

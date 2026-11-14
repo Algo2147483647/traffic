@@ -101,7 +101,7 @@ func TestExampleFoldersLoadRoadAndMetro(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 2 {
+	if len(entries) != 3 {
 		t.Fatal("example discovery", len(entries))
 	}
 	for _, entry := range entries {

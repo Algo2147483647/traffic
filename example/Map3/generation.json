@@ -1,0 +1,30 @@
+{
+  "source": "../Map1",
+  "center": [
+    0,
+    0
+  ],
+  "road_inner_radius_m": 2000,
+  "road_outer_radius_m": 4000,
+  "outer_lanes_per_direction": 4,
+  "inner_lanes_per_direction": 2,
+  "axis_lanes_per_direction": 4,
+  "grid_spacing_m": 500,
+  "grid_radius_m": 2000,
+  "grid_clearance_radius_m": 900,
+  "grid_lanes_per_direction": 1,
+  "lane_width_m": 3.5,
+  "speed_limit_kmh": 60,
+  "metro_station_spacing_m": 2048,
+  "metro_axis_radius_m": 4096,
+  "metro_ring_radius_m": 4096,
+  "metro_ring_layer": -4,
+  "sample_spacing_m": 5,
+  "interchange_profile": "../Map2/interchange-design.json",
+  "bounds": {
+    "min_x": -5200,
+    "min_y": -5200,
+    "max_x": 5200,
+    "max_y": 5200
+  }
+}
