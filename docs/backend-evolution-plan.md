@@ -26,8 +26,10 @@ practical demonstration defaults, not a universal normal traffic demand or a
 calibrated model of a particular city. Backend experiment limits remain broader
 than interactive ranges. The 2.5 m gap is consistent with a common simulation
 baseline: [SUMO vehicle parameters](https://sumo.dlr.de/docs/Definition_of_Vehicles%2C_Vehicle_Types%2C_and_Routes.html).
-That reference does not certify our current following model: speed-dependent
-headway, acceleration and braking remain a real implementation task below.
+That reference does not certify this model. The runtime now consumes a 1.5 s
+desired headway, 2 m/s2 acceleration, 3 m/s2 comfortable braking and an 8 m/s2
+emergency stopping envelope. These are simulation baselines, not a calibration
+against observed traffic.
 
 ## Architecture decisions
 
@@ -61,6 +63,55 @@ and ordinary-trip demand into operations using road-task/arrival contracts.
 Acceptance: equivalent 1x/2x/10x results at equal simulation time; emergency queue
 braking, safe insertion and merge; accepted taxis cannot be reassigned; reset/map
 change rejects stale tasks; all 36 interchange movements and real taxi service pass.
+
+### Stage 1 implementation checkpoint
+
+The requested road-dynamics and operations slice is implemented in the runtime:
+
+- `internal/road/dynamics.go` separates desired following speed, discrete stopping
+  envelopes and host safety limits. Road admission starts at rest; connector
+  traversal also accelerates instead of assigning cruise speed.
+- Moving clearance includes a speed-dependent 1.5 s headway. Normal changes use
+  +2/-3 m/s2. Emergency stopping uses 8 m/s2. A final geometric clamp prevents
+  overlap even for an initially infeasible gap or a changed clearance. That
+  exceptional correction is not a physically attainable braking trajectory.
+- Lane-change admission checks relative speed and braking distance in front and
+  behind; both lanes remain occupied throughout the maneuver.
+- `internal/operations/taxi` owns vehicle business state, transition validation,
+  pickup/dropoff dwell, occupied/empty distance and fare accounting. Road retains
+  the sole physical vehicle and expands/executes its lane path. The JSON view
+  remains compatible through an embedded operational record.
+- Assignment locks a vehicle before pickup. Boarding, occupied travel and
+  alighting remain locked. Only completion or pre-pickup cancellation releases it.
+  Commit validation also rejects retiring vehicles and an existing order ID.
+- `internal/operations/demand.Arrivals` owns fractional ordinary-trip generation;
+  the road adapter admits generated agents. Existing saturation/reset behavior
+  remains. This does not enable simultaneous car/taxi/metro demand.
+
+The broader Stage 1 kernel migration remains open: globally typed entity/run IDs,
+world/topology revision envelopes, a common queued-command/arrival-event protocol,
+and a fully explicit cross-module tick pipeline. Current calls remain synchronous
+under the single simulation mutex, with the existing taxi epoch for asynchronous
+worker invalidation. No unused event API is counted as delivery. Complete these
+kernel contracts before extending worker integration in Stage 2.
+
+Road-end admission remains conservative: vehicles brake before requesting a
+connector, including unsignalized interchange links. There is no advance
+reservation spanning several links, which can underestimate free-flow speed.
+A follow-up must reserve downstream space before permitting continuous-speed
+passage, rather than simply removing the stopping constraint. Connector conflicts
+retain the existing reservation model, not a general 2D collision solver.
+
+Verification covers acceleration/braking and emergency queues, fixed-step playback
+at 1x/2x/10x, spacing and safe lane changes, road admission, all 36 interchange
+movements, hierarchical taxi pickup/delivery, sustained service, and asynchronous
+reset invalidation. Operational tests cover dwell and busy-vehicle rejection in
+every accepted-task state. The implementation checkpoint passed `go test ./...`,
+`go vet ./...`, all seven interchange geometry tests, and both desktop backend
+integration tests. The rebuilt EXE smoke test picked up five orders, completed
+two deliveries, and verified six expanded lane routes. The bundled engine hash
+matches the newly built runtime. Delivery remains at the existing unpacked EXE
+path; no installer or alternate version directory was created.
 
 ### Stage 2: general algorithm host, with two real worker integrations
 

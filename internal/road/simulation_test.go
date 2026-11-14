@@ -86,8 +86,8 @@ func TestFollowerWaitsForVehicleAhead(t *testing.T) {
 	}
 	simulation.advanceLocked(.1)
 	leader, follower := simulation.people[0], simulation.people[1]
-	if math.Abs(leader.along-52) > .001 {
-		t.Fatalf("leader along = %.2f, want 52", leader.along)
+	if math.Abs(leader.along-50.015) > .001 {
+		t.Fatalf("leader along = %.2f, want 50.015", leader.along)
 	}
 	if follower.state != "waiting" || follower.speed != 0 || follower.waitingFor != leader.id {
 		t.Fatalf("follower did not wait: %+v", follower)

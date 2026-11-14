@@ -17,6 +17,7 @@ const (
 
 type laneSpeedConstraint struct {
 	speed    float64
+	safety   float64
 	leaderID int
 }
 
@@ -211,6 +212,9 @@ func laneIn(lanes []int, target int) bool {
 }
 
 func (s *Simulation) laneChangeSafe(person *personState, targetLane int) bool {
+	if s.flowReservation(person) != nil || s.reservedEntry(person.wayID, targetLane, person) {
+		return false
+	}
 	way := s.graph.Ways[person.wayID]
 	if way == nil || targetLane < 0 || targetLane >= way.Lanes || absInt(targetLane-person.lane) != 1 {
 		return false
@@ -223,12 +227,13 @@ func (s *Simulation) laneChangeSafe(person *personState, targetLane int) bool {
 		}
 		delta := other.along - person.along
 		if delta >= 0 {
-			if delta < minimumFront {
+			frontRequirement := minimumFront + math.Max(0, person.speed-other.speed)*followingTime + math.Max(0, person.speed*person.speed-other.speed*other.speed)/(2*emergencyBraking)
+			if delta < frontRequirement {
 				return false
 			}
 			continue
 		}
-		rearRequirement := minimumRear + math.Max(0, other.speed-person.speed)*laneChangeBaseDuration
+		rearRequirement := minimumRear + math.Max(0, other.speed-person.speed)*followingTime + math.Max(0, other.speed*other.speed-person.speed*person.speed)/(2*emergencyBraking)
 		if -delta < rearRequirement {
 			return false
 		}
@@ -275,7 +280,7 @@ func (s *Simulation) advanceRoadVehiclesLocked(dt float64) {
 		}
 		way := s.graph.Ways[person.wayID]
 		active = append(active, person)
-		constraints[person] = laneSpeedConstraint{speed: s.policySpeed(math.Min(s.graph.Simulation.DriveSpeed, way.SpeedLimit))}
+		constraints[person] = laneSpeedConstraint{speed: s.policySpeed(math.Min(s.graph.Simulation.DriveSpeed, way.SpeedLimit)), safety: math.Inf(1)}
 		for lane := 0; lane < way.Lanes; lane++ {
 			if occupiesLane(person, lane) {
 				key := fmt.Sprintf("%s:%d", person.wayID, lane)
@@ -293,17 +298,39 @@ func (s *Simulation) advanceRoadVehiclesLocked(dt float64) {
 		for index := 1; index < len(people); index++ {
 			leader, follower := people[index-1], people[index]
 			spacing := s.minimumVehicleSpacing()
-			if leader.state == "waiting" && !leader.laneChanging {
+			if leader.state == "waiting" && leader.speed < .01 && !leader.laneChanging {
 				spacing = s.minimumStoppedVehicleSpacing()
 			}
 			freeDistance := leader.along - follower.along - spacing
-			allowed := math.Max(0, leader.speed+freeDistance/dt)
+			allowed := followingSpeed(follower.speed, leader.speed, freeDistance, dt)
 			constraint := constraints[follower]
+			constraint.safety = math.Min(constraint.safety, math.Min(math.Max(0, freeDistance)/dt, stoppingSpeed(freeDistance, leader.speed, emergencyBraking, dt)))
 			if allowed < constraint.speed-1e-9 || (math.Abs(allowed-constraint.speed) <= 1e-9 && (constraint.leaderID == 0 || leader.id < constraint.leaderID)) {
 				constraint.speed, constraint.leaderID = allowed, leader.id
-				constraints[follower] = constraint
 			}
+			constraints[follower] = constraint
 		}
+	}
+	flowSpeeds := make(map[*personState]float64)
+	for _, p := range active {
+		w := s.graph.Ways[p.wayID]
+		if r := s.flowReservation(p); r != nil {
+			flowSpeeds[p] = s.downstreamSpeed(p, r, math.Max(0, s.roadTarget(p, w)-p.along), dt)
+		}
+		c := constraints[p]
+		for _, other := range s.people {
+			if other == p || other.state != "turning" || other.wayID != p.wayID || other.lane != p.lane {
+				continue
+			}
+			gap := s.stopLine(w) - p.along + other.turnProgress*other.turnLength - s.minimumVehicleSpacing()
+			desired := followingSpeed(p.speed, other.speed, gap, dt)
+			if desired < c.speed {
+				c.speed = desired
+				c.leaderID = other.id
+			}
+			c.safety = math.Min(c.safety, math.Min(math.Max(0, gap)/dt, stoppingSpeed(gap, other.speed, emergencyBraking, dt)))
+		}
+		constraints[p] = c
 	}
 	sort.Slice(active, func(i, j int) bool { return active[i].id < active[j].id })
 	parallelFor(len(active), 256, func(start, end int) {
@@ -311,11 +338,17 @@ func (s *Simulation) advanceRoadVehiclesLocked(dt float64) {
 			person := active[index]
 			constraint := constraints[person]
 			way := s.graph.Ways[person.wayID]
-			desiredSpeed := math.Min(s.graph.Simulation.DriveSpeed, way.SpeedLimit)
 			target := s.roadTarget(person, way)
-			allowedSpeed := math.Min(constraint.speed, math.Max(0, (target-person.along)/dt))
+			distance := math.Max(0, target-person.along)
+			desired := math.Min(constraint.speed, stoppingSpeed(distance, 0, comfortableBraking, dt))
+			safety := math.Min(constraint.safety, distance/dt)
+			if flowSpeed, ok := flowSpeeds[person]; ok {
+				desired = math.Min(constraint.speed, flowSpeed)
+				safety = constraint.safety
+			}
+			allowedSpeed := advanceSpeed(person.speed, desired, safety, dt)
 			person.speed, person.waitingFor = allowedSpeed, 0
-			if allowedSpeed < desiredSpeed*.08 {
+			if allowedSpeed < .01 {
 				person.state = "waiting"
 				person.waitingFor = constraint.leaderID
 				if constraint.leaderID != 0 {
@@ -330,6 +363,7 @@ func (s *Simulation) advanceRoadVehiclesLocked(dt float64) {
 					person.signalWait = 0
 				}
 			}
+			person.carryDistance = math.Max(0, person.along+allowedSpeed*dt-target)
 			person.along = math.Min(target, person.along+allowedSpeed*dt)
 			person.position, person.heading = way.SampleLane(person.along, person.lanePosition)
 		}

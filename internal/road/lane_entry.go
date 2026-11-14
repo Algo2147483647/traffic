@@ -99,6 +99,9 @@ func (s *Simulation) laneEntryAvailable(wayID string, lane int, along float64, i
 	if way == nil || lane < 0 || lane >= way.Lanes || along < 0 || along > way.Length {
 		return false
 	}
+	if s.reservedEntry(wayID, lane, ignore) {
+		return false
+	}
 	clearance, required := math.Inf(1), s.minimumVehicleSpacing()
 	for _, other := range s.people {
 		if other == ignore {

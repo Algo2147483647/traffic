@@ -16,20 +16,10 @@ type TaxiConfig = taxi.Config
 type TaxiStop = taxi.Stop
 type TaxiOrder = taxi.Order
 type TaxiVehicle struct {
-	Retiring          bool    `json:"retiring"`
-	ID                int     `json:"id"`
-	State             string  `json:"state"`
-	OrderID           int     `json:"order_id"`
-	Completed         int     `json:"completed"`
-	Income            float64 `json:"income"`
-	Occupied          float64 `json:"occupied_s"`
-	EmptyDistance     float64 `json:"empty_distance_m"`
-	OccupiedDistance  float64 `json:"occupied_distance_m"`
-	tripDistanceStart float64
-	idleSince         float64
-	dwellUntil        float64
-	p                 *personState
+	taxi.Vehicle
+	p *personState
 }
+
 type TaxiView struct {
 	Config     TaxiConfig    `json:"config"`
 	Stops      []TaxiStop    `json:"stops"`
@@ -112,9 +102,7 @@ func normalizeTaxi(c TaxiConfig) (TaxiConfig, error) {
 	}
 	return c, nil
 }
-func (s *Simulation) SetMode(mode string, c TaxiConfig) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *Simulation) setModeLocked(mode string, c TaxiConfig) error {
 	if mode != "traffic" && mode != "taxi" {
 		return fmt.Errorf("mode must be traffic or taxi")
 	}
@@ -176,7 +164,7 @@ func (s *Simulation) startTaxi(c TaxiConfig) {
 			p := &personState{id: s.nextID, state: "waiting", wayID: w.ID, lane: lane, lanePosition: float64(lane), along: along, route: []string{w.ID}, destinationAlong: along}
 			p.position, p.heading = w.Sample(along, lane)
 			s.nextID++
-			v := &TaxiVehicle{ID: p.id, State: "Idle", p: p}
+			v := &TaxiVehicle{Vehicle: taxi.NewVehicle(p.id, s.clock.Time), p: p}
 			s.people = append(s.people, p)
 			t.vehicles = append(t.vehicles, v)
 		}
@@ -318,19 +306,18 @@ func (s *Simulation) taxiArrive(p *personState) bool {
 				s.cancelTaxiOrder(o)
 				break
 			}
-			v.State = "Boarding"
-			v.tripDistanceStart = v.OccupiedDistance
-			o.State = "Boarding"
+			if !v.Pickup(o, s.clock.Time, s.taxi.config.Dwell) {
+				return false
+			}
+
 			s.journal.Record(s.clock.Time, "order", o.ID, "Boarding")
-			o.Picked = s.clock.Time
+
 			s.taxi.picked++
 			s.taxi.waitSum += s.clock.Time - o.Created
-			v.dwellUntil = s.clock.Time + s.taxi.config.Dwell
 		case "WithPassenger":
-			v.State = "Alighting"
-			v.dwellUntil = s.clock.Time + s.taxi.config.Dwell
+			v.Dropoff(s.clock.Time, s.taxi.config.Dwell)
 		case "Idle":
-			v.idleSince = math.Min(v.idleSince, s.clock.Time)
+			v.MarkIdle(s.clock.Time)
 		}
 		return true
 	}
@@ -338,17 +325,15 @@ func (s *Simulation) taxiArrive(p *personState) bool {
 }
 func (s *Simulation) cancelTaxiOrder(o *TaxiOrder) {
 	t := s.taxi
-	if o.State != "Waiting" && o.State != "Assigned" {
+	if !taxi.Cancel(o) {
 		return
 	}
-	o.State = "Cancelled"
+
 	s.journal.Record(s.clock.Time, "order", o.ID, "Cancelled")
 	t.cancelled++
 	for _, v := range t.vehicles {
 		if v.OrderID == o.ID {
-			v.OrderID = 0
-			v.State = "Idle"
-			v.idleSince = s.clock.Time
+			v.Release(s.clock.Time)
 		}
 	}
 }
@@ -358,32 +343,26 @@ func (s *Simulation) taxiMaintenance(dt float64) {
 		return
 	}
 	for _, v := range t.vehicles {
-		d := v.p.speed * dt * 1000 / s.graph.WorldUnitsPerKM
-		if v.State == "WithPassenger" {
-			v.Occupied += dt
-			v.OccupiedDistance += d
-		} else {
-			v.EmptyDistance += d
-		}
+		v.Account(dt, v.p.speed*dt)
 		o := t.order(v.OrderID)
-		if (v.State == "Boarding" || v.State == "Alighting") && s.clock.Time >= v.dwellUntil {
+		if v.DwellReady(s.clock.Time) {
 			if v.State == "Alighting" {
 				if o != nil {
-					o.State = "Completed"
+					if !v.Complete(o, s.clock.Time) {
+						continue
+					}
 					s.journal.Record(s.clock.Time, "order", o.ID, "Completed")
-					o.Completed = s.clock.Time
+
 					t.completed++
-					v.Completed++
-					v.Income += 3.4 + 1.8*(v.OccupiedDistance-v.tripDistanceStart)/1000
 				}
-				v.State = "Idle"
-				v.OrderID = 0
-				v.idleSince = s.clock.Time
+				v.Release(s.clock.Time)
 			} else if o != nil {
 				if plan, ok := s.taxiRoute(v.p, t.stop(o.Destination)); ok {
-					o.State = "InService"
+					if !v.Depart(o, s.clock.Time) {
+						continue
+					}
 					s.journal.Record(s.clock.Time, "order", o.ID, "InService")
-					v.State = "WithPassenger"
+
 					s.taxiSetPlan(v, plan)
 				}
 			}
@@ -451,7 +430,7 @@ func (s *Simulation) taxiDispatch() bool {
 		if !taxi.Eligible(v.State, v.Retiring, v.p.state == "turning", v.p.laneChanging) {
 			continue
 		}
-		in.Vehicles = append(in.Vehicles, dispatch.Vehicle{ID: v.ID, Idle: s.clock.Time - v.idleSince, Income: v.Income})
+		in.Vehicles = append(in.Vehicles, dispatch.Vehicle{ID: v.ID, Idle: v.IdleTime(s.clock.Time), Income: v.Income})
 		for _, o := range in.Orders {
 			order := t.order(o.ID)
 			if plan, ok := s.taxiRoute(v.p, t.stop(order.Pickup)); ok {
@@ -517,7 +496,7 @@ func (s *Simulation) commitTaxiDecision(r decisionResult) {
 			}
 		}
 		o := t.order(pair.OrderID)
-		if v == nil || o == nil || !taxi.CanAssign(v.State, o.State) {
+		if v == nil || o == nil || v.Retiring || v.OrderID != 0 || !taxi.CanAssign(v.State, o.State) {
 			t.lastError = "stale proposal rejected"
 			t.failures++
 			return
@@ -528,13 +507,10 @@ func (s *Simulation) commitTaxiDecision(r decisionResult) {
 			if v.ID == pair.VehicleID {
 				o := t.order(pair.OrderID)
 				plan := t.plans[pair]
-				o.State = "Assigned"
+				if !v.Assign(o, s.clock.Time, plan.eta) {
+					continue
+				}
 				s.journal.Record(s.clock.Time, "order", o.ID, "Assigned")
-				o.VehicleID = v.ID
-				o.Assigned = s.clock.Time
-				o.ETA = plan.eta
-				v.OrderID = o.ID
-				v.State = "ToPickup"
 				s.taxiSetPlan(v, plan)
 			}
 		}
@@ -578,9 +554,7 @@ func (s *Simulation) taxiView() *TaxiView {
 }
 
 // SetTaxiLoad changes supply/demand without resetting time, trips or active orders.
-func (s *Simulation) SetTaxiLoad(fleet int, demand float64) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *Simulation) setTaxiLoadLocked(fleet int, demand float64) error {
 	t := s.taxi
 	if t == nil {
 		return fmt.Errorf("switch to Taxi mode first")
@@ -652,7 +626,7 @@ func (s *Simulation) addTaxiVehicles(target int) {
 				p.position, p.heading = w.Sample(along, lane)
 				s.nextID++
 				s.people = append(s.people, p)
-				t.vehicles = append(t.vehicles, &TaxiVehicle{ID: p.id, State: "Idle", idleSince: s.clock.Time, p: p})
+				t.vehicles = append(t.vehicles, &TaxiVehicle{Vehicle: taxi.NewVehicle(p.id, s.clock.Time), p: p})
 				added = true
 				break
 			}
