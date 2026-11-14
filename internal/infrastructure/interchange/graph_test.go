@@ -6,7 +6,7 @@ import (
 )
 
 func TestMacroPorts(t *testing.T) {
-	c, e := model.LoadConfig("../../../configs/presets/four-cell-interchanges.json")
+	c, e := model.LoadConfig("../../../example/Map2/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}

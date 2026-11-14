@@ -3,7 +3,7 @@ package model
 import "testing"
 
 func TestCloverleafMovements(t *testing.T) {
-	c, e := LoadConfig("../../../configs/presets/four-cell-interchanges.json")
+	c, e := LoadConfig("../../../example/Map2/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -74,7 +74,7 @@ func TestCloverleafMovements(t *testing.T) {
 	}
 }
 func TestRejectMalformedFlowConnections(t *testing.T) {
-	c, e := LoadConfig("../../../configs/presets/four-cell-interchanges.json")
+	c, e := LoadConfig("../../../example/Map2/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}

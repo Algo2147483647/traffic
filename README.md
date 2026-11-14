@@ -42,7 +42,7 @@ npm --prefix desktop run pack
 ```
 
 Outputs are in `desktop/dist/`. A packaging hook compiles the Go executable for
-each target architecture before copying it and `configs/` into application
+each target architecture before copying it and `example/` into application
 resources. No dependency on the source checkout or its working directory is
 required at runtime. Build macOS DMGs on a Mac; Windows cannot produce or
 validate a signed macOS application. Signing/notarization credentials are not
@@ -77,7 +77,7 @@ Startup/engine errors appear in a native error dialog.
 Requirements: Go 1.24 or newer.
 
 ```bash
-go run ./cmd/traffic -config configs/meridian-city.json -addr 127.0.0.1:8080
+go run ./cmd/traffic -config example/Map1/road.json -addr 127.0.0.1:8080
 ```
 
 Open [http://localhost:8080](http://localhost:8080). The HTML, CSS, and
@@ -87,7 +87,7 @@ separate frontend process.
 The top-bar map selector exposes two live presets:
 
 - **Preset 1 — Meridian Hierarchy** keeps the JSON map supplied through
-  `-config` (the existing `configs/meridian-city.json` by default).
+  `-config` (the existing `example/Map1/road.json` by default).
 - **Preset 2 — Four-Cell Interchange Network** has a central full cloverleaf
   with four loop ramps, four direct right-turn ramps and four two-lane
   collector-distributor carriageways. The four peripheral nodes retain their
@@ -116,7 +116,7 @@ go test ./cmd/... ./internal/...
 npm --prefix desktop test
 ```
 
-The compiler reads `configs/interchange-design.json`. Generation is deterministic.
+The compiler reads `example/Map2/interchange-design.json`. Generation is deterministic.
 The trumpet and cloverleaf templates are implemented; other
 common types are documented design references. Road paths sampled by the compiler
 are shared by rendering and simulation. Central flow nodes use explicit lane
@@ -124,7 +124,7 @@ connections. Trip endpoints cannot attach to limited-access mainline/C/D roads.
 Ramp elevations use smooth endpoint transitions; slope-dependent dynamics and
 engineering clearance/superelevation checks are not part of the simulation.
 
-Additional presets are ordinary city JSON files in `configs/presets/`. The
+Additional presets are ordinary city JSON files in `example/`. The
 server discovers all `*.json` files in filename order at startup, using each
 filename (without `.json`) as its preset ID. Add a file to extend the selector,
 or point `-preset-dir` at another directory; no Go code change is required.
@@ -327,7 +327,7 @@ approach-shaped polygons instead of generic circles.
 
 ## JSON input
 
-The included [Meridian Hierarchy configuration](configs/meridian-city.json)
+The included [Meridian Hierarchy configuration](example/Map1/road.json)
 defines 21 named intersections and 48 long directed ways. Four neighborhood
 trees feed collectors, then curved ramps, and finally four-lane cross-city
 arterials; local streets never connect directly to the central exchange.
@@ -420,7 +420,7 @@ desktop/                     Electron window, engine lifecycle, installers and s
 cmd/traffic-bench/           seeded fixed-time/adaptive A/B benchmark
 cmd/traffic-observe/         real-time congestion observer and JSON report
 configs/                     primary JSON city input
-configs/presets/             auto-discovered JSON map presets
+example/             auto-discovered JSON map presets
 internal/infrastructure/road/              graph, intersection, segment, and matrix model
 internal/road/                spawning, walking, driving, queuing, snapshots
 internal/server/             HTTP/SSE API and embedded HTML UI
@@ -452,3 +452,10 @@ Physical units and time stepping are documented in [physical-units.md](docs/phys
 Current defaults and the next backend stages: [backend evolution plan](docs/backend-evolution-plan.md).
 
 External route/signal workers and live road/taxi demand: [runtime guide](docs/algorithms-and-demand.md).
+
+
+Preset folders are loaded from lowercase `example/`. Each folder contains
+`preset.json`, `road.json` and `metro.json`; Map 2 additionally keeps its interchange
+profile and generator inputs in JSON. Both the CLI and unpacked desktop read these
+files at startup. See [example layouts](docs/example-layouts.md) for physical units,
+terminal circuits, layers and acceptance checks.

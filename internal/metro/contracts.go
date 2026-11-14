@@ -1,4 +1,4 @@
-// Package metro defines the extension boundary; no metro service is advertised yet.
+// Package metro includes the running metro executor and future strategy contracts.
 package metro
 
 import "context"

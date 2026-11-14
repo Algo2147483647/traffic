@@ -36108,5 +36108,6 @@
       ]
     }
   ],
-  "world_units_per_km": 1000
+  "world_units_per_km": 1000,
+  "metro_file": "metro.json"
 }

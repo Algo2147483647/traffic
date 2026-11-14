@@ -5,12 +5,14 @@ import (
 	"math"
 	"traffic/internal/foundation"
 	model "traffic/internal/infrastructure/road"
+	"traffic/internal/metro"
 	"traffic/internal/operations/demand"
 )
 
 // Command is the sole public mutation contract. Graph is an immutable host input;
 // remote callers switch validated presets through the existing control endpoint.
 type Command struct {
+	Metro      metro.Config    `json:"metro,omitempty"`
 	Demand     demand.Config   `json:"demand,omitempty"`
 	Algorithms AlgorithmConfig `json:"algorithms,omitempty"`
 	Kind       string          `json:"kind"`
@@ -86,7 +88,7 @@ func validateCommand(c Command) error {
 		return fmt.Errorf("command value must be finite")
 	}
 	switch c.Kind {
-	case "pause", "resume", "reset", "set_mode", "set_taxi_load", "step", "set_algorithms", "set_demand", "set_taxi_config":
+	case "pause", "resume", "reset", "set_mode", "set_taxi_load", "step", "set_algorithms", "set_demand", "set_taxi_config", "set_metro":
 	case "set_walk_speed":
 		if c.Value < .3 || c.Value > 3 {
 			return fmt.Errorf("walking speed must be 0.3-3 m/s")
@@ -139,6 +141,8 @@ func (s *Simulation) drainCommandsLocked() map[uint64]error {
 }
 func (s *Simulation) applyCommandLocked(c Command) error {
 	switch c.Kind {
+	case "set_metro":
+		return s.metro.Configure(c.Metro)
 	case "set_taxi_config":
 		return s.setTaxiConfigLocked(c.Taxi)
 	case "set_demand":

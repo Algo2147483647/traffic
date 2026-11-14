@@ -9,6 +9,7 @@ import (
 	"time"
 	"traffic/internal/foundation"
 	"traffic/internal/infrastructure/interchange"
+	"traffic/internal/metro"
 	"traffic/internal/operations/demand"
 
 	model "traffic/internal/infrastructure/road"
@@ -65,6 +66,8 @@ type Stats struct {
 }
 
 type Snapshot struct {
+	Metro metro.View `json:"metro"`
+
 	Demand *demand.Summary `json:"demand,omitempty"`
 
 	Algorithms AlgorithmView `json:"algorithms"`
@@ -213,6 +216,8 @@ type personState struct {
 }
 
 type Simulation struct {
+	metro *metro.Runtime
+
 	mode         string
 	demandStream *demand.Stream
 
@@ -427,6 +432,7 @@ func (s *Simulation) advanceSubstep(dt float64) {
 	s.commitArrivalsLocked()
 	s.taxiMaintenance(dt)
 	s.removeFinishedPrivateCars()
+	s.metro.Advance(dt)
 	s.clock.Tick++
 	s.stamp.World++
 	s.bindJournal()
@@ -683,6 +689,18 @@ func (s *Simulation) resetLockedCommand(population int) {
 }
 
 func (s *Simulation) resetLocked(population int) {
+	mc := metro.DefaultConfig()
+	if s.metro != nil {
+		mc = s.metro.Snapshot().Config
+	}
+	if s.graph.Metro != nil {
+		if s.metro == nil {
+			mc = s.graph.Metro.Defaults
+		}
+		s.metro = metro.NewNetwork(s.graph.Metro, mc)
+	} else {
+		s.metro = metro.New(nil, mc)
+	}
 	if s.demandStream != nil {
 		s.demandStream = demand.New(s.demandStream.Config, 0)
 	}
@@ -899,7 +917,7 @@ func (s *Simulation) setTimeScaleLocked(scale float64) {
 func (s *Simulation) Snapshot() Snapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	snapshot := Snapshot{Algorithms: s.algorithmView(), WalkSpeed: s.walkSpeed, Kernel: s.stamp, City: s.graph.Name, Time: s.clock.Time, Tick: s.clock.Tick, Paused: s.clock.Paused, TimeScale: s.clock.Rate,
+	snapshot := Snapshot{Metro: s.metro.Snapshot(), Algorithms: s.algorithmView(), WalkSpeed: s.walkSpeed, Kernel: s.stamp, City: s.graph.Name, Time: s.clock.Time, Tick: s.clock.Tick, Paused: s.clock.Paused, TimeScale: s.clock.Rate,
 		Load:    LoadState{Population: len(s.people), SpawnRate: s.spawnRate, MaxPopulation: s.maxPeople},
 		Spacing: SpacingState{SafeGap: s.safeGap, VehicleSize: s.graph.Simulation.VehicleSize},
 		People:  make([]Person, len(s.people)), Signals: s.signalStates()}

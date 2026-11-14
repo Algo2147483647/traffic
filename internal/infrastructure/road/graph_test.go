@@ -20,6 +20,30 @@ func testConfig() CityConfig {
 	}
 }
 
+func TestMultipleElevatedLevels(t *testing.T) {
+	c := testConfig()
+	for i := range c.Intersections {
+		c.Intersections[i].Layer = 2
+		c.Intersections[i].Elevation = 13
+	}
+	for i := range c.Ways {
+		c.Ways[i].Structure = "bridge"
+	}
+	c.Intersections = append(c.Intersections, IntersectionConfig{ID: "C", Position: Vec2{X: 10, Y: 90}}, IntersectionConfig{ID: "D", Position: Vec2{X: 190, Y: 90}})
+	c.Ways = append(c.Ways, WayConfig{ID: "CD", From: "C", To: "D", Lanes: 1, LaneWidth: 3.5, SpeedLimit: 10}, WayConfig{ID: "DC", From: "D", To: "C", Lanes: 1, LaneWidth: 3.5, SpeedLimit: 10})
+	g, err := BuildGraph(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.Ways["AB"].StartLayer != 2 || g.Ways["AB"].EndLayer != 2 {
+		t.Fatal("lost numeric deck levels")
+	}
+	c.Intersections[1].Layer = 1
+	if _, err = BuildGraph(c); err == nil {
+		t.Fatal("bridge connected different floors without a ramp")
+	}
+}
+
 func TestBuildGraphCreatesWeightedEdgesAndLaneTransforms(t *testing.T) {
 	graph, err := BuildGraph(testConfig())
 	if err != nil {

@@ -48,6 +48,7 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 		MovementRules:   cfg.MovementRules,
 		Bounds:          cfg.Bounds,
 		Simulation:      cfg.Simulation,
+		Metro:           cfg.Metro,
 		Intersections:   make(map[string]*Intersection, len(cfg.Intersections)),
 		Ways:            make(map[string]*Way, len(cfg.Ways)),
 		Outgoing:        make(map[string][]*Way),
@@ -66,7 +67,7 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 		if _, exists := graph.Intersections[intersection.ID]; exists {
 			return nil, fmt.Errorf("duplicate intersection %q", intersection.ID)
 		}
-		if intersection.Layer < 0 || intersection.Layer > 1 || math.IsNaN(intersection.Elevation) || math.IsInf(intersection.Elevation, 0) || intersection.Elevation < 0 || (intersection.Layer == 0 && intersection.Elevation != 0) || (intersection.Layer == 1 && intersection.Elevation <= 0) {
+		if intersection.Layer < 0 || intersection.Layer > 16 || math.IsNaN(intersection.Elevation) || math.IsInf(intersection.Elevation, 0) || intersection.Elevation < 0 || (intersection.Layer == 0 && intersection.Elevation != 0) || (intersection.Layer > 0 && intersection.Elevation <= 0) {
 			return nil, fmt.Errorf("intersection %s has invalid layer/elevation", intersection.ID)
 		}
 		angle := intersection.Rotation * math.Pi / 180
@@ -150,11 +151,11 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 		if input.Structure == "ground" && (from.Layer != 0 || to.Layer != 0) {
 			return nil, fmt.Errorf("ground way %s has elevated endpoints", input.ID)
 		}
-		if input.Structure == "bridge" && (from.Layer != 1 || to.Layer != 1) {
+		if input.Structure == "bridge" && (from.Layer < 1 || from.Layer != to.Layer) {
 			return nil, fmt.Errorf("bridge way %s needs elevated endpoints", input.ID)
 		}
 		tripAccess := input.TripAccess == nil || *input.TripAccess
-		way := &Way{TripAccess: tripAccess, Role: input.Role, Geometry: input.Geometry, Structure: input.Structure, StartElevation: from.Elevation, EndElevation: to.Elevation, ID: input.ID, Name: input.Name, From: input.From, To: input.To, Lanes: input.Lanes,
+		way := &Way{TripAccess: tripAccess, Role: input.Role, Geometry: input.Geometry, Structure: input.Structure, StartLayer: from.Layer, EndLayer: to.Layer, StartElevation: from.Elevation, EndElevation: to.Elevation, ID: input.ID, Name: input.Name, From: input.From, To: input.To, Lanes: input.Lanes,
 			LaneWidth: input.LaneWidth, CarriagewayOffset: carriagewayOffset,
 			SpeedLimit: input.SpeedLimit, RoadClass: input.RoadClass, Demand: input.Demand,
 			Weight: input.Lanes, Points: points}

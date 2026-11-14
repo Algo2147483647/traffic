@@ -20,7 +20,7 @@ import (
 )
 
 func main() {
-	config := flag.String("config", "configs/presets/four-cell-interchanges.json", "Map file")
+	config := flag.String("config", "example/Map2/road.json", "Map file")
 	policies := flag.String("algorithms", "nearest,fifo,greedy,hungarian,batch,score", "Comma-separated policy IDs")
 	seeds := flag.String("seeds", "71429,71430,71431", "Paired random seeds")
 	horizon := flag.Float64("duration", 600, "Simulation seconds")

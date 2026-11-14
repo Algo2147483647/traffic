@@ -6,7 +6,7 @@ import (
 )
 
 func TestInterchangeRampTravel(t *testing.T) {
-	c, e := model.LoadConfig("../../configs/presets/four-cell-interchanges.json")
+	c, e := model.LoadConfig("../../example/Map2/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -39,7 +39,7 @@ func TestInterchangeRampTravel(t *testing.T) {
 
 // Exercise each advertised movement independently so demand cannot hide an unused ramp.
 func TestEveryInterchangeMovementDrivesThrough(t *testing.T) {
-	c, e := model.LoadConfig("../../configs/presets/four-cell-interchanges.json")
+	c, e := model.LoadConfig("../../example/Map2/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}

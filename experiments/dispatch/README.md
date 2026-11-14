@@ -1,7 +1,7 @@
 # Experimental dispatch extension
 
 This directory is loaded at backend startup. In the unpacked desktop it lives at
-`resources/experiments/dispatch` beside `resources/configs`. Edit a local manifest
+`resources/experiments/dispatch` beside `resources/example`. Edit a local manifest
 and restart the application to discover a new algorithm in Settings > Taxi.
 
 `wait-balanced.json` runs `wait_balanced.py` with the Python interpreter on PATH.

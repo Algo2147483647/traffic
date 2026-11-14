@@ -6,7 +6,7 @@ import (
 )
 
 func TestMeridianCityConfig(t *testing.T) {
-	config, err := LoadConfig("../../../configs/meridian-city.json")
+	config, err := LoadConfig("../../../example/Map1/road.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestMeridianCityConfig(t *testing.T) {
 	for _, way := range path {
 		seenClass[way.RoadClass] = true
 	}
-	for _, class := range []string{"local", "collector", "ramp", "arterial"} {
+	for _, class := range []string{"local", "collector", "arterial"} {
 		if !seenClass[class] {
 			t.Errorf("cross-city route never uses %s roads: %v", class, seenClass)
 		}

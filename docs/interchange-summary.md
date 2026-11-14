@@ -28,12 +28,12 @@
 | Responsibility | Owning source |
 |---|---|
 | Design / references / limitations | `docs/interchange-system.md` |
-| Profile and common-type catalogue | `configs/interchange-design.json` |
+| Profile and common-type catalogue | `example/Map2/interchange-design.json` |
 | Curve sampling and envelope checks | `scripts/interchanges/geometry.py` |
 | Cloverleaf template and explicit lane wiring | `scripts/interchanges/cloverleaf.py` |
 | Map composition | `scripts/generate_interchange_map.py` |
 | Rotatable trumpet template | `scripts/interchanges/trumpet.py` |
-| Generated runnable map | `configs/presets/four-cell-interchanges.json` |
+| Generated runnable map | `example/Map2/road.json` |
 | Model contract and validation | `internal/infrastructure/road/types.go`, `graph.go`, `signal_plan.go` |
 | Elevation / access / vehicle execution | `internal/infrastructure/road/traffic.go`, `internal/road/simulation.go` |
 | Layered map and route overview | `internal/server/web/app.js` |

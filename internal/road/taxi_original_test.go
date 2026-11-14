@@ -6,7 +6,7 @@ import (
 )
 
 func TestTaxiOriginalMap(t *testing.T) {
-	c, e := model.LoadConfig("../../configs/meridian-city.json")
+	c, e := model.LoadConfig("../../example/Map1/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -21,7 +21,8 @@ func TestTaxiOriginalMap(t *testing.T) {
 	if e = s.SetMode("taxi", cfg); e != nil {
 		t.Fatal(e)
 	}
-	for i := 0; i < 24000 && s.taxi.completed < 2; i++ {
+	// The 2 km ring creates longer real journeys than the previous compact map.
+	for i := 0; i < 48000 && s.taxi.completed < 2; i++ {
 		s.Step(.05)
 	}
 	if s.taxi.completed < 2 {

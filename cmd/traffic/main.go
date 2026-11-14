@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"time"
 
 	"traffic/internal/algorithms"
@@ -29,8 +30,8 @@ func main() {
 }
 
 func run() error {
-	config := flag.String("config", "configs/meridian-city.json", "City JSON file")
-	presetDir := flag.String("preset-dir", "configs/presets", "Additional city presets (empty disables discovery)")
+	config := flag.String("config", "example/Map1/road.json", "City JSON file")
+	presetDir := flag.String("preset-dir", "example", "Additional city presets (empty disables discovery)")
 	addr := flag.String("addr", "127.0.0.1:8080", "HTTP listen address")
 	desktop := flag.Bool("desktop", false, "Private desktop service; exit when parent stdin closes")
 	policyDir := flag.String("dispatch-dir", "experiments/dispatch", "Local experimental policy manifest directory")
@@ -74,6 +75,11 @@ func run() error {
 		}
 		for _, entry := range entries {
 			if entry.ID == "preset-1" {
+				a, _ := filepath.Abs(entry.Path)
+				b, _ := filepath.Abs(*config)
+				if a == b {
+					continue
+				}
 				return fmt.Errorf("reserved preset ID: %s", entry.ID)
 			}
 			g, err := model.BuildGraph(entry.Config)

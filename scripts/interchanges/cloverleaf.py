@@ -2,7 +2,7 @@
 import math
 from .geometry import arc,cubic,rotate,validate_profile
 
-def build_cloverleaf(city,nodes,node,way,profile,center=(3000,3000)):
+def build_cloverleaf(city,nodes,node,way,profile,center):
     p=profile;validate_profile(p)
     offset=p['cd_offset'];r=p['loop_radius'];rr=p['right_radius'];space=p['sample_spacing'];dirs=[];ports={}
     arrivals=['W','N','E','S'];departures=['E','S','W','N']

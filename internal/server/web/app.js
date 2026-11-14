@@ -5,6 +5,7 @@
   const dashboard = document.querySelector(".dashboard");
   let ctx = canvas.getContext("2d");
   let renderStructure = null;
+  let renderLevel = null;
   const $ = (id) => document.getElementById(id);
   const state = {
     city: null, snapshot: null, selected: null, layerFilter: "all", showTransforms: false, showCoordinates: true, transform: null,
@@ -27,12 +28,13 @@
 
   function fitCanvas() {
     const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.max(1, Math.round(rect.width * ratio));
     canvas.height = Math.max(1, Math.round(rect.height * ratio));
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     if (!state.city) return;
-    const b = state.city.bounds, padding = 34;
+    const b = displayBounds(), padding = 50;
     const baseScale = Math.min((rect.width - padding * 2) / (b.max_x - b.min_x), (rect.height - padding * 2) / (b.max_y - b.min_y));
     const baseOx = (rect.width - (b.max_x - b.min_x) * baseScale) / 2 - b.min_x * baseScale;
     const baseOy = (rect.height - (b.max_y - b.min_y) * baseScale) / 2 - b.min_y * baseScale;
@@ -105,6 +107,9 @@
   }
 
   function drawWayRange(way, from, to, lane, color, width, extraOffset = 0, lineCap = "round") {
+    const interval=wayInterval(way);if(!interval)return;
+    const length=wayLength(way),lo=Math.max(Math.min(from,to),interval[0]*length),hi=Math.min(Math.max(from,to),interval[1]*length);
+    if(hi<=lo)return;from=lo;to=hi;
     ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = lineCap; ctx.lineJoin = "round"; ctx.beginPath();
     const distance = Math.abs(to - from), steps = way.geometry === "sampled" ? Math.max(4,Math.ceil(distance/6)) : Math.max(4, Math.min(36, Math.ceil(distance / 160)));
     const points = [];
@@ -120,15 +125,19 @@
     const { width, height } = currentTransform();
     ctx.clearRect(0, 0, width, height);
     drawBackdrop(width, height);
-    for (const layer of ["ground", "ramp", "bridge"]) {
-      if (state.layerFilter !== "all" && state.layerFilter !== layer) continue;
-      renderStructure = layer;
-      drawWays(); drawIntersectionPads(); drawSelectedTrip(); drawSignals();
-      drawLaneDirectionMarkings(); drawIntersections(); drawTaxiStops(); drawPeople();
+    drawMetro();
+    const levels = state.layerFilter === "all" ? roadLevels() : [Number(state.layerFilter)];
+    for (const level of levels) {
+      renderLevel = level;
+      for (const layer of ["ground", "ramp", "bridge"]) {
+        renderStructure = layer;
+        drawWays(); drawIntersectionPads(); drawSelectedTrip(); drawSignals();
+        drawLaneDirectionMarkings(); drawIntersections(); drawTaxiStops(); drawPeople();
+      }
     }
-    renderStructure = null;
+    renderStructure = null; renderLevel = null;
     const groups = new Map();
-    state.city.intersections.forEach(n => { if(n.interchange && !groups.has(n.interchange)) groups.set(n.interchange, n); });
+    state.city.intersections.forEach(n => { if(n.interchange && nodeVisible(n) && !groups.has(n.interchange)) groups.set(n.interchange, n); });
     ctx.font="12px Times New Roman"; ctx.fillStyle="#dddddd";
     groups.forEach((n,id) => { const members=state.city.intersections.filter(i=>i.interchange===id), p=screen({x:members.reduce((a,n)=>a+n.position.x,0)/members.length,y:members.reduce((a,n)=>a+n.position.y,0)/members.length});ctx.fillText((state.city.interchanges||[]).find(g=>g.id===id)?.name || `${id} interchange`,p.x+12,p.y-28); });
     drawCoordinateRulers();
@@ -137,7 +146,7 @@
 
   function drawCoordinateRulers() {
     if (!state.showCoordinates) return;
-    const t=currentTransform(), b=state.city.bounds, units=state.city.world_units_per_km || 1000;
+    const t=currentTransform(), b=displayBounds(), units=state.city.world_units_per_km || 1000;
     const nice=value=>{const power=10**Math.floor(Math.log10(value)), n=value/power;return (n>=5?5:n>=2?2:1)*power;};
     const step=nice(110/t.scale/units), stepWorld=step*units;
     const format=value=>Number(value.toFixed(Math.max(0,-Math.floor(Math.log10(step))+1))).toString();
@@ -152,7 +161,7 @@
     ctx.beginPath();ctx.moveTo(left,top);ctx.lineTo(right,top);ctx.moveTo(left,top);ctx.lineTo(left,bottom);ctx.stroke();
     const ticks=(min,max,origin,screenMin,screenMax,drawTick)=>{
       const start=Math.max(min,(screenMin-origin)/t.scale), end=Math.min(max,(screenMax-origin)/t.scale);
-      for(let i=Math.ceil((start-min)/stepWorld-1e-9);min+i*stepWorld<=end+1e-8;i++)drawTick(origin+(min+i*stepWorld)*t.scale,format(i*step));
+      for(let i=Math.ceil(start/stepWorld-1e-9);i*stepWorld<=end+1e-8;i++)drawTick(origin+i*stepWorld*t.scale,format(i*step));
     };
     ctx.textAlign="center";ctx.textBaseline="bottom";
     ticks(b.min_x,b.max_x,t.ox,left,right,(x,label)=>{ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,top+5);ctx.stroke();ctx.fillText(label,x,top-4);});
@@ -168,18 +177,73 @@
     ctx.restore();
   }
 
+  function roadLevels() { return [...new Set([0, ...state.city.intersections.map(n=>n.layer||0)])].sort((a,b)=>a-b); }
+  function selectedLevel() { return renderLevel ?? (state.layerFilter === "all" ? null : Number(state.layerFilter)); }
+  function levelVisible(level) { const wanted=selectedLevel(); return wanted===null || wanted===level; }
+  function wayLevels(way) { return [way.start_layer ?? 0, way.end_layer ?? 0]; }
+  function wayInterval(way) {
+    const level=selectedLevel(); if(level===null)return [0,1];
+    const [a,b]=wayLevels(way); if(a===b)return level===a?[0,1]:null;
+    const u=(level-.5-a)/(b-a),v=(level+.5-a)/(b-a);
+    const lo=Math.max(0,Math.min(u,v)),hi=Math.min(1,Math.max(u,v));
+    return lo<hi?[lo,hi]:null;
+  }
   function wayVisible(way) {
-    const structure = way.structure || "ground";
-    return renderStructure ? structure === renderStructure : state.layerFilter === "all" || structure === state.layerFilter;
+    return (!renderStructure || (way.structure||"ground")===renderStructure) && !!wayInterval(way);
   }
   function nodeVisible(node) {
-    const layer = node.layer ? "bridge" : "ground";
-    const filter = renderStructure || state.layerFilter;
-    if (filter === "all") return true;
-    if (filter === "ramp") return !renderStructure && state.city.ways.some(w=>w.structure === "ramp" && (w.from === node.id || w.to === node.id));
-    return layer === filter;
+    return levelVisible(node.layer||0) && (!renderStructure || renderStructure===((node.layer||0)>0?"bridge":"ground"));
   }
-
+  function personLevel(person) {
+    const way=state.city.ways.find(w=>w.id===person.way_id);
+    if(!way)return 0;
+    const [a,b]=wayLevels(way),height=way.end_elevation-way.start_elevation;
+    return Math.round(height ? a+(b-a)*Math.max(0,Math.min(1,((person.elevation||0)-way.start_elevation)/height)) : a);
+  }
+  function displayBounds() {
+    const wanted=state.layerFilter,points=[];
+    for(const line of state.snapshot?.metro?.lines||[])if(wanted==="all"||Number(wanted)===line.layer)points.push(...line.track||[]);
+    if(wanted==="all"||Number(wanted)>=0) {
+      if(wanted==="all" || wanted==="0") { const b=state.city.bounds;points.push({x:b.min_x,y:b.min_y},{x:b.max_x,y:b.max_y}); }
+      else for(const w of state.city.ways) if(wayInterval(w))points.push(...w.points);
+    }
+    if(!points.length)return state.city.bounds;
+    const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
+    const min_x=Math.min(...xs),max_x=Math.max(...xs),min_y=Math.min(...ys),max_y=Math.max(...ys);
+    return {min_x,max_x:max_x===min_x?max_x+200:max_x,min_y:min_y===max_y?min_y-100:min_y,max_y:min_y===max_y?max_y+100:max_y};
+  }
+  function drawMetro() {
+    const m=state.snapshot?.metro;if(!m)return;
+    const scale=currentTransform().scale,colors=["#72bde8","#c7a1ef","#7ed4b1"];
+    ctx.save();ctx.font="12px Times New Roman";
+    for(const line of [...m.lines].sort((a,b)=>a.layer-b.layer)) {
+      if(!line.track?.length||!levelVisible(line.layer))continue;
+      const color=colors[line.id%colors.length];
+      const trace=()=>{ctx.beginPath();line.track.forEach((v,i)=>{const p=screen(v);i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});};
+      ctx.lineJoin="round";ctx.lineCap="round";
+      trace();ctx.strokeStyle=color;ctx.lineWidth=line.tunnel_outer_diameter_m*scale;ctx.stroke();
+      trace();ctx.strokeStyle="#080808";ctx.lineWidth=line.tunnel_inner_diameter_m*scale;ctx.stroke();
+      for(const id of line.stations) {
+        const st=m.stations[id],p=screen(st.position);ctx.fillStyle=color;
+        ctx.beginPath();ctx.arc(p.x,p.y,2.5*scale,0,Math.PI*2);ctx.fill();
+        if(scale>.08)ctx.fillText(st.name+" / "+st.waiting,p.x+8,p.y-10);
+      }
+      for(const t of m.trains.filter(t=>t.line===line.id)) {
+        const w=t.car_length_m*scale,h=t.car_width_m*scale,gap=.3*scale;
+        for(let i=0;i<t.cars.length;i++) {
+          const pose=t.car_poses?.[i];if(!pose)continue;
+          const p=screen(pose.position);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(pose.heading);
+          ctx.fillStyle=color;ctx.fillRect(-w/2+gap/2,-h/2,w-gap,h);
+          const n=t.cars[i],cols=Math.max(1,Math.ceil(Math.sqrt(n*(w-gap)/h))),rows=Math.max(1,Math.ceil(n/cols));
+          const dx=(w-gap)/cols,dy=h/rows,r=Math.min(.15*scale,dx*.32,dy*.32);ctx.fillStyle="#111";
+          for(let k=0;k<n;k++){ctx.beginPath();ctx.arc(-w/2+gap/2+(k%cols+.5)*dx,-h/2+(Math.floor(k/cols)+.5)*dy,r,0,Math.PI*2);ctx.fill();}
+          ctx.restore();
+        }
+        const p=screen(t.position);ctx.fillStyle=color;ctx.fillText("T"+t.id+" / "+t.passengers,p.x+8,p.y+(t.direction>0?20:-14));
+      }
+    }
+    ctx.restore();
+  }
   function drawBackdrop(width, height) {
     ctx.fillStyle = "#080808"; ctx.fillRect(0, 0, width, height);
 
@@ -320,6 +384,7 @@
   }
 
   function drawLaneDirectionArrow(way, lane, along, turns, arrowLength) {
+    const interval=wayInterval(way);if(!interval||along<interval[0]*wayLength(way)||along>interval[1]*wayLength(way))return;
     const sample = sampleWay(way, along, lane), position = screen(sample), scale = currentTransform().scale;
     const length = arrowLength * scale, laneWidth = way.lane_width * scale;
     if (laneWidth < 3) return;
@@ -357,8 +422,9 @@
     person.route.forEach((wayID, index) => {
       const way = ways[wayID]; if (!way || !wayVisible(way)) return;
       ctx.strokeStyle = index < person.route_index ? "rgba(239,200,91,.20)" : "rgba(255,255,255,.32)";
-      ctx.lineWidth = 2.5; ctx.beginPath(); drawPolyline(way.points); ctx.stroke();
+      drawWayRange(way,0,wayLength(way),(way.lanes-1)/2,ctx.strokeStyle,2.5);
     });
+    if(!levelVisible(personLevel(person)))return;
     const origin = screen(person.origin), current = screen(person.position), destination = screen(person.destination);
     ctx.setLineDash([3,4]); ctx.lineWidth = 1.2 * currentTransform().scale;
     ctx.strokeStyle = "rgba(239,200,91,.72)"; ctx.beginPath(); ctx.moveTo(origin.x, origin.y); ctx.lineTo(current.x, current.y); ctx.stroke();
@@ -403,8 +469,7 @@
     const denseOverview = state.city.intersections.length > 40 && state.camera.zoom < 4.5;
     state.city.intersections.forEach((intersection) => {
       if (!nodeVisible(intersection)) return;
-      const p = screen(intersection.position), signal = state.snapshot?.signals?.find((item) => item.intersection_id === intersection.id);
-      const marker=selectedID===intersection.id?7:denseOverview?2.2:5,halo=denseOverview?1.6:2;ctx.fillStyle=selectedID===intersection.id?"#fff":"#dfe4d8";ctx.fillRect(p.x-marker,p.y-marker,marker*2,marker*2);ctx.strokeStyle=signal?.stage==="green"?"rgba(200,242,107,.9)":signal?.stage==="amber"?"rgba(239,200,91,.9)":"rgba(255,120,95,.65)";ctx.lineWidth=selectedID===intersection.id?2:1;ctx.strokeRect(p.x-marker*halo,p.y-marker*halo,marker*halo*2,marker*halo*2);
+      const p = screen(intersection.position);
       if (selectedID === intersection.id || (!denseOverview && state.camera.zoom > .36)) { ctx.fillStyle = "rgba(235,238,228,.66)"; ctx.font = "9px ui-monospace,monospace"; ctx.fillText(`${intersection.id}  ${intersection.name.toUpperCase()}`, p.x + 13, p.y - 8); }
     });
   }
@@ -418,8 +483,8 @@
   }
 
   function drawTaxiStops(){
-    const taxi=state.snapshot?.taxi;if(!taxi||renderStructure!=="ground")return;
-    for(const stop of taxi.stops){const p=screen(stop.position),order=taxi.orders.find(o=>o.pickup===stop.id&&["Waiting","Assigned","Boarding"].includes(o.state));ctx.save();ctx.strokeStyle=order?"#efc85b":"#7196a1";ctx.lineWidth=1;ctx.strokeRect(p.x-4,p.y-4,8,8);if(order){ctx.fillStyle="#efc85b";ctx.font="12px Times New Roman";ctx.fillText(`#${order.id}`,p.x+8,p.y-5);}ctx.restore();}
+    const taxi=state.snapshot?.taxi;if(!taxi||renderStructure!=="ground"||!levelVisible(0))return;
+    for(const stop of taxi.stops){const p=screen(stop.position),order=taxi.orders.find(o=>o.pickup===stop.id&&["Waiting","Assigned","Boarding"].includes(o.state));ctx.save();ctx.strokeStyle=order?"#efc85b":"#7196a1";ctx.lineWidth=1;ctx.beginPath();ctx.arc(p.x,p.y,1.2*currentTransform().scale,0,Math.PI*2);ctx.stroke();if(order){ctx.fillStyle="#efc85b";ctx.font="12px Times New Roman";ctx.fillText(`#${order.id}`,p.x+8,p.y-5);}ctx.restore();}
   }
   function showOrder(id){const t=state.snapshot?.taxi,o=t?.orders.find(o=>o.id===id);if(!o)return;$("order-title").textContent=`Order #${o.id}`;$("order-state").textContent=o.state;
     const values=[["Taxi",o.vehicle_id?`T-${o.vehicle_id}`:"Unassigned"],["Pickup",o.pickup.replace("stop:","")],["Destination",o.destination.replace("stop:","")],["Requested",`${o.created_s.toFixed(1)} s`],["Pickup estimate",`${o.pickup_eta_s.toFixed(1)} s (free flow)`],["Wait",`${((o.state==="InService"||o.state==="Completed"||o.state==="Boarding")?o.picked_s-o.created_s:state.snapshot.time-o.created_s).toFixed(1)} s`]];
@@ -431,11 +496,11 @@
     const scale = currentTransform().scale, ways = Object.fromEntries(state.city.ways.map((way) => [way.id, way]));
     state.snapshot.people.forEach((person) => {
       const structure = person.structure || "ground";
-      if (renderStructure && structure !== renderStructure) return;
+      if ((renderStructure && structure !== renderStructure)||!levelVisible(personLevel(person))) return;
       const p = screen(person.position), selected = state.selected?.type === "person" && state.selected.id === person.id;
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(person.heading_degrees * Math.PI / 180);
       if (person.state.startsWith("walking") || person.state === "arrived") {
-        ctx.fillStyle = person.state === "arrived" ? "#ffffff" : "#efc85b"; ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=4*scale;ctx.beginPath();ctx.arc(0,0,4*scale,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle="rgba(7,16,14,.9)";ctx.lineWidth=.8*scale;ctx.stroke();
+        ctx.fillStyle = person.state === "arrived" ? "#ffffff" : "#efc85b"; ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=4*scale;ctx.beginPath();ctx.arc(0,0,2*scale,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
       } else {
         const way=ways[person.way_id],length=(state.city.simulation.vehicle_size||6)*scale,width=1.8*scale;const taxi=state.snapshot.taxi?.vehicles.find(v=>v.id===person.id);ctx.fillStyle=taxi?({Idle:"#a8b0b5",ToPickup:"#efc85b",Boarding:"#efc85b",WithPassenger:"#69d6ef",Alighting:"#69d6ef"}[taxi.state]||"#eee"):(person.state==="waiting"?"#ff785f":"#c8f26b");ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=4*scale;ctx.fillRect(-length/2,-width/2,length,width);ctx.shadowBlur=0;
       }
@@ -446,7 +511,9 @@
 
   function updateSnapshot(snapshot) {
     if(state.snapshot?.mode!==snapshot.mode)state.selected=null;
+    const metroGeometryChanged=JSON.stringify(state.snapshot?.metro?.stations.map(s=>s.position))!==JSON.stringify(snapshot.metro?.stations.map(s=>s.position));
     state.snapshot = snapshot;
+    if(metroGeometryChanged&&state.city)fitCanvas();
     $("walk-speed-control").value=snapshot.walk_speed_mps;$("walk-speed-value").textContent=`${snapshot.walk_speed_mps.toFixed(1)} m/s`;
     const taxi=snapshot.taxi;$("simulation-mode").value=snapshot.mode||"traffic";$("taxi-settings").hidden=!taxi;$("traffic-settings").hidden=Boolean(snapshot.demand);$("taxi-stats").hidden=!taxi;$("population-label").textContent="population";
     if(taxi&&state.taxiConfigKey!==JSON.stringify(taxi.config)){state.taxiConfigKey=JSON.stringify(taxi.config);$("taxi-load-feedback").textContent="";$("taxi-fleet").value=taxi.config.fleet;$("taxi-fleet-range").value=taxi.config.fleet;$("taxi-demand").value=taxi.config.orders_per_minute;$("taxi-demand-range").value=taxi.config.orders_per_minute;$("taxi-seed").value=taxi.config.seed;$("taxi-interval").value=taxi.config.dispatch_interval_s;$("taxi-algorithm").value=taxi.config.algorithm;$("taxi-parameters").value=JSON.stringify(taxi.config.parameters||{});}
@@ -459,6 +526,12 @@
 
     if(snapshot.demand){const d=snapshot.demand;const key=JSON.stringify(d.config);if(state.demandKey!==key){state.demandKey=key;$("shared-rate").value=d.config.trips_per_minute;$("shared-share").value=d.config.taxi_share*100;$("shared-share-value").textContent=`${Math.round(d.config.taxi_share*100)}%`;}$("shared-summary").textContent=`${d.generated} generated · ${d.car_trips} car / ${d.taxi_trips} taxi · ${d.queued} queued · ${d.active} active · ${d.completed} completed · ${d.cancelled} cancelled`;}
     if(snapshot.algorithms){const a=snapshot.algorithms;$("road-algorithm-status").textContent=a.last_error?`Native fallback: ${a.last_error}`:`${a.pending?"Computing · ":""}${a.applied} applied · ${a.fallbacks} fallbacks`;}
+    if(snapshot.metro){const m=snapshot.metro,key=JSON.stringify([m.config,m.lines.map(l=>[l.id,l.layer])]);if(state.metroKey!==key){state.metroKey=key;
+      $("metro-levels").replaceChildren(...m.lines.map(line=>{const label=document.createElement("label");label.className="select-control";label.textContent=line.name+" level";const input=document.createElement("select");input.dataset.line=String(line.id);for(let i=-1;i>=-16;i--){const option=document.createElement("option");option.value=String(i);option.textContent=String(i);input.append(option);}input.value=String(line.layer);label.append(input);return label;}));
+      const previous=state.layerFilter;const levels=[...new Set([...m.lines.map(l=>l.layer),...roadLevels()])].sort((a,b)=>a-b);$("layer-index").replaceChildren(...levels.map(l=>{const option=document.createElement("option");option.value=String(l);option.textContent=l<0?`${l} - Metro`:l===0?"0 - Ground":`+${l} - Elevated`;return option;}));if(previous!=="all"&&!levels.includes(Number(previous)))state.layerFilter=String(levels[0]);$("layer-index").value=state.layerFilter==="all"?"0":state.layerFilter;
+$("metro-enabled").checked=m.config.enabled;$("metro-headway").value=m.config.headway_s;$("metro-demand").value=m.config.passengers_per_minute;$("metro-capacity").value=m.config.capacity;$("metro-dwell").value=m.config.dwell_s;$("metro-cars").value=m.config.cars;$("metro-speed").value=m.config.max_speed_kmh;}
+    $("metro-summary").textContent=`${m.generated} generated · ${m.waiting} waiting · ${m.onboard} onboard · ${m.completed} completed · ${m.departures} departures · ${m.blocks.filter(b=>b.occupied_by).length} occupied blocks · ${m.routes.filter(r=>r.owner).length} locked routes`;
+    $("metro-trains").replaceChildren(...m.trains.map(t=>{const p=document.createElement("p");p.textContent=`T${t.id} · ${t.state} · ${(t.speed_mps*3.6).toFixed(1)} km/h · ${t.passengers}/${t.capacity} · ${t.cars.length} cars [${t.cars.join(" / ")}]${t.cars.length!==m.config.cars?" (consist change at empty terminal)":""} · M${t.station+1} → M${t.next+1} · departure in ${Math.max(0,t.departure_s-m.time).toFixed(0)} s · delay ${t.delay_s.toFixed(0)} s`;return p;}));}
     updateComputeRate(snapshot);
     const minutes = Math.floor(snapshot.time / 60).toString().padStart(2, "0"), seconds = (snapshot.time % 60).toFixed(1).padStart(4, "0");
     $("sim-time").textContent = `${minutes}:${seconds}`; $("people-count").textContent = snapshot.people.length;
@@ -486,7 +559,11 @@
 
   function updateCity(city) {
     loadPresets();
-    state.city = city; state.laneDirections = buildLaneDirections(city);
+    state.city = city;
+    const levels=[...new Set([-1,...(state.snapshot?.metro?.lines||[]).map(l=>l.layer),...roadLevels()])].sort((a,b)=>a-b);$("layer-index").replaceChildren(...levels.map(level=>{const option=document.createElement("option");option.value=String(level);option.textContent=level<0?`${level} - Metro`:level===0?"0 - Ground":`+${level} - Elevated`;return option;}));
+    if(state.layerFilter!=="all"&&!levels.includes(Number(state.layerFilter)))state.layerFilter="0";
+    $("layer-index").value=state.layerFilter==="all"?"0":state.layerFilter;
+    state.laneDirections = buildLaneDirections(city);
     $("intersection-count").textContent = city.intersections.filter(n=>n.traffic_control.mode !== "flow").length; $("way-count").textContent = city.ways.length;
     $("lane-count").textContent = city.edges.reduce((sum, edge) => sum + edge.weight, 0);
     state.compute = { tick: null, measuredAt: performance.now(), hz: null };
@@ -669,13 +746,13 @@
   canvas.addEventListener("pointerup", endPointer); canvas.addEventListener("pointercancel", endPointer);
   canvas.addEventListener("click", (event) => {
     if (!state.snapshot || !state.transform) return; const click = canvasPoint(event);
-    const t=state.snapshot.taxi;if(t){const stop=t.stops.find(st=>{const p=screen(st.position);return Math.hypot(p.x-click.x,p.y-click.y)<10;});if(stop){const o=t.orders.find(o=>o.pickup===stop.id&&["Waiting","Assigned","Boarding"].includes(o.state));if(o){state.selected={type:"order",id:o.id};refreshInspector();draw();return;}}}
+    const t=state.snapshot.taxi;if(t&&levelVisible(0)){const stop=t.stops.find(st=>{const p=screen(st.position);return Math.hypot(p.x-click.x,p.y-click.y)<10;});if(stop){const o=t.orders.find(o=>o.pickup===stop.id&&["Waiting","Assigned","Boarding"].includes(o.state));if(o){state.selected={type:"order",id:o.id};refreshInspector();draw();return;}}}
     let intersectionMatch = null, intersectionDistance = 18;
     state.city.intersections.filter(nodeVisible).sort((a,b)=>(a.layer||0)-(b.layer||0)).forEach((item) => { const p = screen(item.position), d = Math.hypot(p.x - click.x, p.y - click.y); if (d < intersectionDistance) { intersectionMatch = item; intersectionDistance = d; } });
-    const group=(state.city.interchanges||[]).find(g => (intersectionMatch?.interchange===g.id) || Math.hypot(screen(g.center).x-click.x,screen(g.center).y-click.y)<45);
+    const group=(state.city.interchanges||[]).filter(g=>state.city.intersections.some(n=>n.interchange===g.id&&nodeVisible(n))).find(g => (intersectionMatch?.interchange===g.id) || Math.hypot(screen(g.center).x-click.x,screen(g.center).y-click.y)<45);
     if (group) state.selected={type:"interchange",id:group.id};
     else if (intersectionMatch) state.selected = { type: "intersection", id: intersectionMatch.id };
-    else { let personMatch = null, distance = 13; state.snapshot.people.filter(p=>state.layerFilter === "all" || (p.structure||"ground") === state.layerFilter).forEach((person) => { const p = screen(person.position), d = Math.hypot(p.x - click.x, p.y - click.y); if (d < distance) { personMatch = person; distance = d; } }); if (personMatch) state.selected = { type: "person", id: personMatch.id }; }
+    else { let personMatch = null, distance = 13; state.snapshot.people.filter(p=>levelVisible(personLevel(p))).forEach((person) => { const p = screen(person.position), d = Math.hypot(p.x - click.x, p.y - click.y); if (d < distance) { personMatch = person; distance = d; } }); if (personMatch) state.selected = { type: "person", id: personMatch.id }; }
     refreshInspector(); draw();
   });
 
@@ -730,8 +807,10 @@
   document.addEventListener("keydown", event => { if (event.key === "Escape" && !settingsPanel.hidden) toggleSettings(false); });
   $("interchange-movement").addEventListener("change",()=>{if(state.selected?.type==="interchange")updateInterchangeInspector(state.selected.id);});
   $("layer-filter").addEventListener("change", event => {
-    state.layerFilter=event.target.value; state.selected=null; refreshInspector(); draw();
+    $("layer-index").disabled=event.target.value==="all";
+    state.layerFilter=event.target.value==="all"?"all":$("layer-index").value; state.selected=null; refreshInspector(); resetView(); fitCanvas();
   });
+  $("layer-index").addEventListener("change",event=>{state.layerFilter=event.target.value;state.selected=null;refreshInspector();resetView();fitCanvas();});
   $("map-preset").addEventListener("change", (event) => switchPreset(event.target.value));
   $("zoom-in-button").addEventListener("click", () => zoomAt(1.5, state.transform.width / 2, state.transform.height / 2)); $("zoom-out-button").addEventListener("click", () => zoomAt(1 / 1.5, state.transform.width / 2, state.transform.height / 2)); $("fit-button").addEventListener("click", resetView);
   $("fullscreen-button").addEventListener("click", async () => { if (document.fullscreenElement) await document.exitFullscreen(); else await dashboard.requestFullscreen(); });
@@ -762,6 +841,7 @@
   $("simulation-mode").addEventListener("change",applyMode);$("taxi-apply").addEventListener("click",async()=>{try{await control("set_taxi_config",{taxi:taxiConfiguration()});}catch(e){$("taxi-error").textContent=e.message;}});
   $("taxi-export").addEventListener("click",()=>{const data={schema_version:1,city:state.city,snapshot:state.snapshot},url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));const a=document.createElement("a");a.href=url;a.download="taxi-run.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
   $("shared-share").addEventListener("input",e=>{$("shared-share-value").textContent=e.target.value+"%";});
+  $("metro-apply").addEventListener("click",()=>control("set_metro",{metro:{line_layers:Object.fromEntries([...$("metro-levels").querySelectorAll("select")].map(e=>[e.dataset.line,Number(e.value)])),cars:Number($("metro-cars").value),max_speed_kmh:Number($("metro-speed").value),enabled:$("metro-enabled").checked,headway_s:Number($("metro-headway").value),passengers_per_minute:Number($("metro-demand").value),capacity:Number($("metro-capacity").value),dwell_s:Number($("metro-dwell").value)}}));
   $("shared-apply").addEventListener("click",async()=>{await control("set_demand",{demand:{trips_per_minute:Number($("shared-rate").value),taxi_share:Number($("shared-share").value)/100}});});
   $("road-algorithm-apply").addEventListener("click",async()=>{try{const parameters=JSON.parse($("road-algorithm-parameters").value);await control("set_algorithms",{algorithms:{route:{id:$("route-algorithm").value,parameters},signal:{id:$("signal-algorithm").value,parameters}}});}catch(e){$("road-algorithm-status").textContent=e.message;}});
   fetch("/api/algorithms/workers").then(r=>r.json()).then(items=>{for(const m of items){const o=document.createElement("option");o.value=m.id;o.textContent=m.name||m.id;$(m.capability+"-algorithm").append(o);}}).catch(e=>{$("road-algorithm-status").textContent=e.message;});

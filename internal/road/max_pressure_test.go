@@ -188,7 +188,7 @@ func TestMaxPressureSanitizesInvalidQueueValues(t *testing.T) {
 }
 
 func TestSimulationAppliesNewMaximumPressureAtDecisionBoundary(t *testing.T) {
-	config, err := model.LoadConfig("../../configs/meridian-city.json")
+	config, err := model.LoadConfig("../../example/Map1/road.json")
 	if err != nil {
 		t.Fatal(err)
 	}

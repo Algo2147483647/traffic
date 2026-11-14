@@ -4,10 +4,10 @@ from interchanges.trumpet import build_trumpet
 from interchanges.cloverleaf import build_cloverleaf, compile_flow_connections
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-base = json.loads((ROOT/'configs/meridian-city.json').read_text(encoding='utf-8'))
+base = json.loads((ROOT/'example/Map2/road.json').read_text(encoding='utf-8'))
+layout=json.loads((ROOT/'example/Map2/generation.json').read_text())
 city = {k:v for k,v in base.items() if k not in ('intersections','ways')}
-city.update(name='Four-Cell Interchange Network', description='Central cloverleaf and four trumpet interchanges.', bounds=dict(min_x=0,min_y=0,max_x=6000,max_y=6000), intersections=[], ways=[])
-city['simulation'] = dict(base['simulation'], people=320, intersection_radius=20, max_people=1000)
+city.update(intersections=[],ways=[],interchanges=[])
 nodes={}
 def node(id,x,y,layer=0,group='',flow=False):
     n=dict(id=id,name=id.replace('_',' '),position=dict(x=x,y=y),layer=layer,elevation=profile['cloverleaf']['deck_height']*layer,interchange=group)
@@ -19,25 +19,19 @@ def way(a,b,lanes=3,structure='ground',points=None):
     city['ways'].append(w)
 def pair(a,b,lanes=3):way(a,b,lanes);way(b,a,lanes)
 import math
-profile=json.loads((ROOT/'configs/interchange-design.json').read_text(encoding='utf-8-sig'))
-C=build_cloverleaf(city,nodes,node,way,profile['cloverleaf'])
-N=build_trumpet(city,nodes,node,way,'N',(3000,600),0,profile['trumpet'])
-S=build_trumpet(city,nodes,node,way,'S',(3000,5400),math.pi,profile['trumpet'])
-W=build_trumpet(city,nodes,node,way,'W',(600,3000),-math.pi/2,profile['trumpet'])
-E=build_trumpet(city,nodes,node,way,'E',(5400,3000),math.pi/2,profile['trumpet'])
-for label,x,y in [('NW',600,600),('NE',5400,600),('SW',600,5400),('SE',5400,5400)]:node(label,x,y)
-def connect(a,b):way(a[1],b[0]);way(b[1],a[0])
-def corner(id):return(id,id)
-connect(corner('NW'),N['W']);connect(N['E'],corner('NE'))
-connect(corner('SW'),S['E']);connect(S['W'],corner('SE'))
-connect(corner('SW'),W['W']);connect(W['E'],corner('NW'))
-connect(corner('NE'),E['W']);connect(E['E'],corner('SE'))
-connect(N['S'],C['N']);connect(C['S'],S['S'])
-connect(W['S'],C['W']);connect(C['E'],E['S'])
+profile=json.loads((ROOT/'example/Map2/interchange-design.json').read_text(encoding='utf-8-sig'))
+groups={'C':build_cloverleaf(city,nodes,node,way,profile['cloverleaf'],center=layout['center'])}
+for item in layout['trumpets']:groups[item['id']]=build_trumpet(city,nodes,node,way,item['id'],item['center'],item['angle'],profile['trumpet'])
+for label,(x,y) in layout['corners'].items():node(label,x,y)
+def port(ref):
+    if '.' not in ref:return(ref,ref)
+    group,arm=ref.split('.');return groups[group][arm]
+for a,b in layout['links']:
+    a,b=port(a),port(b);way(a[1],b[0]);way(b[1],a[0])
 compile_flow_connections(city)
 city['description']='Four-cell network with a central C/D cloverleaf and four peripheral trumpet interchanges.'
 city['world_units_per_km']=profile['world_units_per_km']
-out=ROOT/'configs/presets/four-cell-interchanges.json'
+out=ROOT/'example/Map2/road.json'
 for road in city['ways']:
     road['speed_limit'] = min(road['speed_limit'], 60/3.6)
 out.write_text(json.dumps(city,indent=2)+'\n',encoding='utf-8')

@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
+	"strings"
+	"traffic/internal/metro"
 )
 
 // Vec2 is a point or vector in screen-oriented world coordinates: X increases
@@ -172,6 +175,8 @@ type Interchange struct {
 }
 
 type CityConfig struct {
+	MetroFile         string               `json:"metro_file,omitempty"`
+	Metro             *metro.Layout        `json:"-"`
 	GeometryAlgorithm string               `json:"geometry_algorithm,omitempty"`
 	PhaseAlgorithm    string               `json:"phase_algorithm,omitempty"`
 	WorldUnitsPerKM   float64              `json:"world_units_per_km"`
@@ -194,6 +199,15 @@ func LoadConfig(path string) (CityConfig, error) {
 	var cfg CityConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return CityConfig{}, fmt.Errorf("decode city config: %w", err)
+	}
+	if cfg.MetroFile != "" {
+		if filepath.IsAbs(cfg.MetroFile) || strings.Contains(cfg.MetroFile, "..") {
+			return CityConfig{}, fmt.Errorf("metro file must be local to the example")
+		}
+		cfg.Metro, err = metro.LoadLayout(filepath.Join(filepath.Dir(path), cfg.MetroFile))
+		if err != nil {
+			return CityConfig{}, fmt.Errorf("metro layout: %w", err)
+		}
 	}
 	return cfg, nil
 }
@@ -260,6 +274,8 @@ type Way struct {
 	Role           string  `json:"role,omitempty"`
 	Geometry       string  `json:"geometry,omitempty"`
 	Structure      string  `json:"structure"`
+	StartLayer     int     `json:"start_layer"`
+	EndLayer       int     `json:"end_layer"`
 	StartElevation float64 `json:"start_elevation"`
 	EndElevation   float64 `json:"end_elevation"`
 	ID             string  `json:"id"`
@@ -289,6 +305,7 @@ type Edge struct {
 }
 
 type Graph struct {
+	Metro           *metro.Layout            `json:"-"`
 	WorldUnitsPerKM float64                  `json:"world_units_per_km"`
 	Interchanges    []Interchange            `json:"interchanges,omitempty"`
 	Name            string                   `json:"name"`

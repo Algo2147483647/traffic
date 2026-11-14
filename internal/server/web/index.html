@@ -20,7 +20,8 @@
       <div class="settings-map-grid">
         <label class="select-control preset-control">Map<select id="map-preset" aria-label="Map preset" disabled><option>Loading maps…</option></select></label>
         <label class="select-control">Demand mix<select id="simulation-mode"><option value="traffic">Traffic</option><option value="taxi">Taxi</option><option value="mixed">Road + Taxi</option></select></label>
-        <label class="select-control">Layer<select id="layer-filter" aria-label="Map layer"><option value="all">All layers</option><option value="ground">Ground</option><option value="bridge">Bridges</option><option value="ramp">Ramps</option></select></label>
+        <label class="select-control">Layers<select id="layer-filter" aria-label="Map layers"><option value="all">All levels</option><option value="specified">Specified level</option></select></label>
+        <label class="select-control">Level<select id="layer-index" aria-label="Specified level" disabled><option value="-1">-1 - Metro</option><option value="0" selected>0 - Ground</option></select></label>
       </div>
       <div class="simulation-controls" aria-label="Simulation controls">
         <button id="pause-button" type="button">Pause</button><button id="step-button" type="button" class="quiet">Step</button><button id="reset-button" type="button" class="quiet">Reset</button>
@@ -31,18 +32,29 @@
         <label class="coordinate-control"><input id="show-coordinates" type="checkbox" checked> Show coordinates and scale</label>
       </div>
       <label class="range-control"><span>Walking speed <b id="walk-speed-value">1.4 m/s</b></span><input id="walk-speed-control" type="range" min="0.3" max="3" step="0.1" value="1.4"></label>
-      <section id="shared-demand-settings">
+      <section id="metro-settings"><h3>Metro operation</h3>
+<label><input id="metro-enabled" type="checkbox" checked> Run metro</label>
+<label class="select-control">Terminal departure interval (s)<input id="metro-headway" type="number" min="30" max="900" value="180"></label>
+<label class="select-control">Passengers per minute<input id="metro-demand" type="number" min="0" max="120" value="12"></label>
+<label class="select-control">Cars per train<input id="metro-cars" type="number" min="1" max="12" value="6"></label>
+<label class="select-control">Maximum speed (km/h)<input id="metro-speed" type="number" min="10" max="300" value="300"></label>
+<p>One dot = one passenger. Car counts change at an empty terminal.</p>
+<label class="select-control">Train capacity<input id="metro-capacity" type="number" min="1" max="1000" value="120"></label>
+<label class="select-control">Minimum dwell (s)<input id="metro-dwell" type="number" min="5" max="120" value="20"></label>
+<div id="metro-levels"></div><button id="metro-apply">Apply metro settings</button><p id="metro-summary"></p><div id="metro-trains"></div>
+</section>
+<section id="shared-demand-settings">
         <h3>Shared travel demand</h3>
         <label class="select-control">Trips per minute<input id="shared-rate" type="number" min="0" max="60" step="0.5" value="2"></label>
         <label class="range-control"><span>Taxi share <b id="shared-share-value">50%</b></span><input id="shared-share" type="range" min="0" max="100" step="5" value="50"></label>
         <button id="shared-apply">Apply demand mix</button><p id="shared-summary" role="status"></p>
       </section>
-      <details><summary>Route and signal algorithms</summary>
+      <section><h3>Route and signal algorithms</h3>
         <label class="select-control">Route planner<select id="route-algorithm"><option value="native">Native</option></select></label>
         <label class="select-control">Signal scheduler<select id="signal-algorithm"><option value="native">Native</option></select></label>
         <label class="select-control">Parameters (JSON)<textarea id="road-algorithm-parameters">{}</textarea></label>
         <button id="road-algorithm-apply">Apply algorithms</button><p id="road-algorithm-status" role="status"></p>
-      </details>
+      </section>
       <section id="taxi-settings" hidden>
         <div class="settings-section-heading"><h3>Taxi service</h3><span id="taxi-fleet-status"></span></div>
         <div class="taxi-live-fields">
@@ -52,12 +64,12 @@
           <input id="taxi-demand-range" type="range" min="0" max="60" step="0.5" value="2" aria-label="Order frequency slider">
         </div>
         <button id="taxi-load-apply" class="apply-load">Apply live</button><p id="taxi-load-feedback" role="status"></p>
-        <details class="taxi-advanced"><summary>Dispatch &amp; experiment</summary>
+        <section class="taxi-advanced"><h3>Dispatch &amp; experiment</h3>
           <label class="select-control">Algorithm<select id="taxi-algorithm"><option value="nearest">Nearest ETA</option></select></label>
           <div class="taxi-fields"><label>Seed<input id="taxi-seed" type="number" value="71429"></label><label>Dispatch interval (s)<input id="taxi-interval" type="number" min="1" max="30" value="2"></label></div>
           <label class="range-control">Algorithm parameters (JSON)<textarea id="taxi-parameters" rows="3">{"wait_weight":0.25}</textarea></label>
           <div class="settings-action-row"><button id="taxi-apply">Apply taxi settings</button><button id="taxi-export" class="quiet">Export run</button></div>
-        </details>
+        </section>
         <p id="taxi-error" role="status"></p>
       </section>
       <section id="traffic-settings" class="glass load-overlay">

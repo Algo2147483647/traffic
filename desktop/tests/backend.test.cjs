@@ -5,7 +5,7 @@ const { startBackend } = require('../backend.cjs');
 
 test('bundled engine authenticates, simulates, switches presets, streams, and exits with parent', { timeout: 90000 }, async t => {
   const platform = process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux';
-  const backend = await startBackend({ runtime: path.resolve(__dirname, '../runtime', `${platform}-${process.arch}`), configs: path.resolve(__dirname, '../../configs') });
+  const backend = await startBackend({ runtime: path.resolve(__dirname, '../runtime', `${platform}-${process.arch}`), configs: path.resolve(__dirname, '../../example') });
   t.after(() => backend.stop());
   const headers = { 'X-Traffic-Token': backend.token, 'Content-Type': 'application/json' };
   const get = async route => {

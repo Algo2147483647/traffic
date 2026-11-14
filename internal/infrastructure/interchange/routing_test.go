@@ -11,7 +11,7 @@ import (
 
 func routingFixture(t *testing.T) (*model.Graph, *Planner) {
 	t.Helper()
-	c, err := model.LoadConfig("../../../configs/presets/four-cell-interchanges.json")
+	c, err := model.LoadConfig("../../../example/Map2/road.json")
 	if err != nil {
 		t.Fatal(err)
 	}

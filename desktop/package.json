@@ -39,8 +39,8 @@
         "to": "traffic-runtime"
       },
       {
-        "from": "../configs",
-        "to": "configs",
+        "from": "../example",
+        "to": "example",
         "filter": [
           "**/*.json"
         ]

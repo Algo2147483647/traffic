@@ -564,7 +564,7 @@ func TestLaneChangeProgressesWhileStoppedAndOccupiesBothLanes(t *testing.T) {
 }
 
 func TestAdaptiveSignalExtendsGapsOutAndHonorsMaximumGreen(t *testing.T) {
-	config, err := model.LoadConfig("../../configs/meridian-city.json")
+	config, err := model.LoadConfig("../../example/Map1/road.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -674,7 +674,7 @@ func signalStateTestControl() model.TrafficControl {
 }
 
 func TestAdaptiveControllerImprovesSeededMeridianDemand(t *testing.T) {
-	config, err := model.LoadConfig("../../configs/meridian-city.json")
+	config, err := model.LoadConfig("../../example/Map1/road.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -704,7 +704,7 @@ func TestAdaptiveControllerImprovesSeededMeridianDemand(t *testing.T) {
 }
 
 func TestMeridianRemainsLiveUnderLongRunningClosedLoad(t *testing.T) {
-	config, err := model.LoadConfig("../../configs/meridian-city.json")
+	config, err := model.LoadConfig("../../example/Map1/road.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -730,7 +730,7 @@ func TestMeridianRemainsLiveUnderLongRunningClosedLoad(t *testing.T) {
 }
 
 func TestAdaptiveSignalsCycleEveryPhaseWithoutDemand(t *testing.T) {
-	config, err := model.LoadConfig("../../configs/meridian-city.json")
+	config, err := model.LoadConfig("../../example/Map1/road.json")
 	if err != nil {
 		t.Fatal(err)
 	}

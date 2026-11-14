@@ -2,8 +2,8 @@
 
 This plan supersedes the ordering in the earlier implementation audit. Existing
 SI units, 50 ms physics, compact interchanges, lane-path expansion and single-order
-taxi service are retained. Metro and mixed demand remain unavailable until their
-runtime acceptance gates pass. Adding interfaces alone does not complete a stage.
+taxi service are retained. Road/taxi mixed demand and the Stage 4 metro runtime
+are implemented; unified road/taxi/metro demand remains Stage 5. Adding interfaces alone does not complete a stage.
 
 ## Settings baseline delivered with this plan
 
@@ -245,6 +245,13 @@ block occupancy; no release while a tail remains; no capacity overflow; passenge
 complete journeys and remain conserved. Timetable/interlocking interfaces alone
 do not satisfy any of these gates.
 
+Stage 4 is now implemented as a four-station, two-train single-track executor.
+It includes real timetable gates, bounded motion, section/block occupancy,
+station-throat and platform reservations, reversal, FIFO destination-aware
+passenger service and capacity enforcement. It is visible and configurable in the
+running desktop. See [metro runtime](metro-runtime.md) for geometry, controls and
+conservative reservation limits. Stage 5's shared three-mode source is not enabled.
+
 ### Stage 5: three-mode demand and metro strategy execution
 
 Extend Stage 3's stream with metro only after 4C. Resolve metro OD to served stations
@@ -314,6 +321,6 @@ immediately by Stage 2's external routing and signal scheduling. Then car/taxi
 coexistence gives a working mixed-demand foundation before metro is added. This
 delivers useful running capabilities earlier than expanding every interface first.
 
-This document is an implementation plan. The present delivery changes settings
-defaults/ranges and documents these next stages; it does not claim that stages
-1-6, metro or mixed transport have now been implemented.
+This document records the staged plan and implementation checkpoints. See
+`metro-runtime.md` for the current executable metro scope and remaining limits;
+completed checkpoints do not imply that all six stages are complete.

@@ -15,6 +15,7 @@ import (
 	"traffic/internal/dispatch"
 	"traffic/internal/foundation"
 	model "traffic/internal/infrastructure/road"
+	"traffic/internal/metro"
 	"traffic/internal/operations/demand"
 	sim "traffic/internal/road"
 )
@@ -232,6 +233,7 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 }
 
 type controlRequest struct {
+	Metro      metro.Config        `json:"metro,omitempty"`
 	Demand     demand.Config       `json:"demand,omitempty"`
 	Algorithms sim.AlgorithmConfig `json:"algorithms,omitempty"`
 	WalkSpeed  float64             `json:"walk_speed_mps,omitempty"`
@@ -256,6 +258,11 @@ func (s *Server) control(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch request.Action {
+	case "set_metro":
+		if err := s.simulation.Execute(sim.Command{Kind: "set_metro", Metro: request.Metro}); err != nil {
+			s.writeError(w, 400, err.Error())
+			return
+		}
 	case "set_taxi_config":
 		if err := s.simulation.Execute(sim.Command{Kind: "set_taxi_config", Taxi: request.Taxi}); err != nil {
 			s.writeError(w, 400, err.Error())

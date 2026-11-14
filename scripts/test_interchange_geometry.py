@@ -7,14 +7,14 @@ class GeometryTests(unittest.TestCase):
   self.assertLess(math.dist(pts[0],(210,70)),1e-8);self.assertLess(math.dist(pts[-1],(70,210)),1e-8)
   self.assertTrue(all(math.dist(a,b)<=6.001 for a,b in zip(pts,pts[1:])))
  def test_profile_rejects_overlap(self):
-  p=json.loads((Path(__file__).resolve().parents[1]/'configs/interchange-design.json').read_text(encoding='utf-8-sig'))['cloverleaf'];validate_profile(p)
+  p=json.loads((Path(__file__).resolve().parents[1]/'example/Map2/interchange-design.json').read_text(encoding='utf-8-sig'))['cloverleaf'];validate_profile(p)
   p['right_radius']=200
   with self.assertRaises(ValueError):validate_profile(p)
  def test_cubic_endpoints(self):
   pts=cubic((0,0),(10,0),(10,10),(20,10),2)
   self.assertEqual(pts[0],(0,0));self.assertEqual(pts[-1],(20,10))
  def test_trumpet_endpoint_tangency(self):
-  city=json.loads((Path(__file__).resolve().parents[1]/'configs/presets/four-cell-interchanges.json').read_text())
+  city=json.loads((Path(__file__).resolve().parents[1]/'example/Map2/road.json').read_text())
   nodes={n['id']:n for n in city['intersections']}
   ways=city['ways']
   for w in ways:
@@ -31,7 +31,7 @@ class GeometryTests(unittest.TestCase):
      cosine=sum(x*y for x,y in zip(u,v))/(math.hypot(*u)*math.hypot(*v))
      self.assertGreater(cosine,math.cos(math.radians(3)),w['id'])
  def test_trumpet_crossings_are_on_separate_levels(self):
-  city=json.loads((Path(__file__).resolve().parents[1]/'configs/presets/four-cell-interchanges.json').read_text())
+  city=json.loads((Path(__file__).resolve().parents[1]/'example/Map2/road.json').read_text())
   nodes={n['id']:n for n in city['intersections']}
   def points(w):return [(p['x'],p['y']) for p in w.get('points',[nodes[w['from']]['position'],nodes[w['to']]['position']])]
   def cross(a,b):return a[0]*b[1]-a[1]*b[0]
@@ -55,7 +55,7 @@ class GeometryTests(unittest.TestCase):
         self.assertEqual(abs(nodes[a['from']]['elevation']-nodes[b['from']]['elevation']),6.5)
    self.assertEqual(crossings,4,group)
  def test_compact_geometry_curvature_and_grade(self):
-  city=json.loads((Path(__file__).resolve().parents[1]/'configs/presets/four-cell-interchanges.json').read_text())
+  city=json.loads((Path(__file__).resolve().parents[1]/'example/Map2/road.json').read_text())
   nodes={n['id']:n for n in city['intersections']}
   for w in city['ways']:
    if not w.get('role'):continue
@@ -70,7 +70,7 @@ class GeometryTests(unittest.TestCase):
     radius=math.dist(a,b)*math.dist(b,c)*math.dist(c,a)/(2*area)
     self.assertLessEqual(w['speed_limit']**2/radius,2.0,w['id'])
  def test_compact_envelopes(self):
-  city=json.loads((Path(__file__).resolve().parents[1]/'configs/presets/four-cell-interchanges.json').read_text())
+  city=json.loads((Path(__file__).resolve().parents[1]/'example/Map2/road.json').read_text())
   for group,maximum in [('C',1741),('N',1241),('S',1241),('W',1241),('E',1241)]:
    points=[n['position'] for n in city['intersections'] if n.get('interchange')==group]
    for axis in ['x','y']:self.assertLessEqual(max(p[axis] for p in points)-min(p[axis] for p in points),maximum)

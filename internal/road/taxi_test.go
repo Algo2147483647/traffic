@@ -10,7 +10,7 @@ import (
 
 func taxiGraph(t *testing.T) *model.Graph {
 	t.Helper()
-	c, e := model.LoadConfig("../../configs/presets/four-cell-interchanges.json")
+	c, e := model.LoadConfig("../../example/Map2/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}

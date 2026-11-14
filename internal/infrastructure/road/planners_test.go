@@ -3,7 +3,7 @@ package model
 import "testing"
 
 func TestPlannerRevalidatesOutput(t *testing.T) {
-	c, e := LoadConfig("../../../configs/meridian-city.json")
+	c, e := LoadConfig("../../../example/Map1/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}
