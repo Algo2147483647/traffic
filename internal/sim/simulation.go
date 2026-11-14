@@ -11,6 +11,8 @@ import (
 )
 
 type Person struct {
+	Structure     string        `json:"structure"`
+	Elevation     float64       `json:"elevation"`
 	ID            int           `json:"id"`
 	State         string        `json:"state"`
 	Position      model.Vec2    `json:"position"`
@@ -803,6 +805,18 @@ func (s *Simulation) Snapshot() Snapshot {
 					LocalTransform: model.RelativeTo(reference.Position, pose)}, WaitingFor: state.waitingFor,
 				WaitingSignal: state.waitingSignal, WaitingReason: state.waitingReason, Origin: state.origin, Destination: state.destination,
 				Route: append([]string(nil), state.route...), RouteIndex: state.routeIndex, Trip: state.trip,
+			}
+			person.Structure = "ground"
+			if way := s.graph.Ways[state.wayID]; way != nil {
+				person.Structure = way.Structure
+				fraction := math.Max(0, math.Min(1, state.along/way.Length))
+				person.Elevation = way.StartElevation + (way.EndElevation-way.StartElevation)*fraction
+				if state.state == "turning" {
+					person.Elevation = way.EndElevation
+					if next := s.graph.Ways[state.nextWayID]; next != nil && state.turnProgress >= .5 {
+						person.Structure = next.Structure
+					}
+				}
 			}
 			if state.laneChanging {
 				person.LaneChange = &LaneChange{FromLane: state.laneChangeFrom, ToLane: state.laneChangeTo, Progress: state.laneChangeProgress, Reason: state.laneChangeReason}

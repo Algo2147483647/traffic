@@ -8,7 +8,7 @@ import (
 )
 
 func TestMetropolitanGridPresetStructure(t *testing.T) {
-	config, err := LoadConfig("../../configs/presets/atlas-metropolitan-grid.json")
+	config, err := LoadConfig("testdata/atlas-metropolitan-grid.json")
 	if err != nil {
 		t.Fatal(err)
 	}

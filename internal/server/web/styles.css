@@ -8,3 +8,36 @@
 @media(max-width:1050px){.top-overlay{align-items:flex-start}.brand-lockup{min-width:150px}.simulation-controls{justify-content:flex-end;flex-wrap:wrap}.clock-block:not(.frequency-block){display:none}.connection{display:none}.right-stack{top:105px}}@media(max-width:760px){.top-overlay{top:8px;left:8px;right:8px;padding:8px}.brand-lockup{min-width:0}.brand-lockup .eyebrow{display:none}.brand-lockup h1{max-width:78px;font-size:11px}.mark{width:30px;height:30px}.simulation-controls button:nth-of-type(2),.simulation-controls button:nth-of-type(3),.select-control:not(.preset-control),.divider,.view-scale{display:none}.preset-control{font-size:0}.preset-control select{min-width:118px;max-width:135px}.frequency-block{min-width:52px}.right-stack{top:96px;right:8px;bottom:50px;width:min(286px,calc(100vw - 16px))}.load-overlay{max-height:255px}.stats-overlay{left:8px;bottom:50px;width:235px;padding:10px}.stat-meta{display:none}.map-key{left:8px;bottom:8px;gap:7px;padding:7px}.map-key span:nth-child(2),.map-key span:nth-child(3){display:none}.map-help{display:none}}
 
 .movement-list{display:grid;grid-template-columns:1fr}.flow-card{border:1px solid var(--line);padding:10px;color:#81928a;font:11px var(--mono)}.flow-card svg{display:block;width:100%;margin-top:8px}.flow-card small{display:block;margin-top:5px}.flow-active{color:var(--acid);border-color:var(--acid)}.right-stack:has(#signal-inspector:not([hidden])){width:390px}.right-stack:has(#signal-inspector:not([hidden])) .load-overlay{display:none}.right-stack:has(#signal-inspector:not([hidden])) .inspector-overlay{max-height:100%;flex:1;min-height:0}
+
+[hidden]{display:none!important}
+.settings-toggle{position:absolute;top:14px;left:14px;z-index:25;width:44px;height:44px;font-size:25px;border-radius:10px;background:rgba(24,24,24,.7)!important}
+.top-overlay{top:68px;left:14px;right:auto;width:min(420px,calc(100vw - 28px));max-height:calc(100vh - 90px);overflow:auto;display:flex;flex-direction:column;align-items:stretch;padding:18px;gap:16px;z-index:24}
+#settings-close{align-self:flex-end;font-size:22px}.simulation-controls{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:12px}.top-overlay .load-overlay{max-height:none;padding:0}.top-overlay .connection{display:flex}.top-overlay .range-control span,.top-overlay .range-control b{font-size:13px}.top-overlay .clock-block{display:flex}.top-overlay button,.top-overlay select{font-size:13px}.top-overlay .divider{display:none}
+.stats-overlay{left:auto;right:14px;bottom:14px;width:360px;background:linear-gradient(180deg,#ffffff18,#ffffff0a);border:1px solid #ffffff38;box-shadow:inset 0 1px 0 #ffffff29,0 10px 24px #00000008;backdrop-filter:blur(16px) saturate(135%)}
+.stats-overlay .clock-block{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.stats-overlay .clock-block strong{font-size:22px}.stats-overlay .clock-block span{font-size:12px}
+.right-stack,.right-stack:has(#signal-inspector:not([hidden])){top:14px;bottom:240px;width:420px;max-width:calc(100vw - 28px)}.right-stack .inspector-overlay{max-height:100%;min-height:0;flex:1}.right-stack:has(#empty-inspector:not([hidden])){display:none}
+#signal-inspector .panel-heading h2{font-size:20px}#signal-inspector .panel-heading>span{font-size:13px}#signal-inspector .active-phase,#signal-inspector .next-phase{font-size:14px;margin-left:0}.controller-card span{font-size:12px}.controller-card strong{font-size:13px;line-height:1.5}.phase-row{font-size:13px;padding:10px 0;grid-template-columns:8px 1fr auto}.flow-card{font-size:15px;line-height:1.5;padding:12px}.flow-card small{font-size:13px}
+
+.stats-overlay{left:14px;right:auto;border:0;border-radius:20px;box-shadow:0 0 24px 10px #ffffff04;background:radial-gradient(ellipse at center,#ffffff12 0%,#ffffff08 65%,#ffffff00 100%);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.settings-toggle{display:grid;place-items:center;padding:0;border:0!important;outline:none;box-shadow:none;background:transparent!important;line-height:1}.settings-toggle svg{display:block}.settings-toggle:focus-visible{outline:1px solid #ffffff70;outline-offset:2px}
+.right-stack,.right-stack:has(#signal-inspector:not([hidden])){bottom:14px;transition:width .18s ease}.right-stack .inspector-overlay{font-family:"Times New Roman",Times,serif}.right-stack .inspector-overlay *{font-family:inherit!important}.right-stack .controller-card span{font-size:14px}.right-stack .controller-card strong,.right-stack .phase-row{font-size:15px}.right-stack .flow-card{font-size:17px}
+#inspector-toggle{position:absolute;left:-32px;top:0;width:30px;height:38px;padding:0;border:0;background:#141414b0;font:26px/1 "Times New Roman",serif;pointer-events:auto;cursor:pointer;border-radius:8px 0 0 8px}.right-stack.collapsed,.right-stack.collapsed:has(#signal-inspector:not([hidden])){width:0}.right-stack.collapsed .inspector-overlay{display:none}
+
+#settings-panel,.right-stack .inspector-overlay{border:0;border-radius:20px;box-shadow:0 0 24px 10px #ffffff04;background:radial-gradient(ellipse at center,#ffffff12 0%,#ffffff08 65%,#ffffff00 100%);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.flow-card,.flow-card.flow-active{border:0;border-radius:0;background:transparent;padding:12px 0}.flow-card canvas{border:0;border-radius:12px}.phase-row i{width:7px;height:7px}.phase-row.next i{background:#efc85b;border-color:#efc85b;box-shadow:0 0 6px #efc85b60}#inspector-toggle{background:transparent}
+
+.stat-primary{display:flex;justify-content:space-between;align-items:center;gap:16px}.stat-primary>div{display:flex;align-items:baseline;gap:8px}.stat-primary #sim-time{font-size:22px;white-space:nowrap}
+
+/* Consistent detail-panel type scale; Times New Roman is inherited. */
+.right-stack .inspector-overlay{font-size:12px;line-height:1.45}
+.right-stack .inspector-overlay .panel-heading h2,#signal-inspector .panel-heading h2{font-size:16px;line-height:1.25;font-weight:600}
+.right-stack .inspector-overlay .panel-heading>span,#signal-inspector .panel-heading>span{font-size:12px;line-height:1.3}
+.right-stack .inspector-overlay .panel-heading p,.right-stack .inspector-overlay .matrix-label{font-size:10px;line-height:1.4;letter-spacing:.04em}
+.right-stack .inspector-overlay .controller-card span{font-size:11px;line-height:1.4;text-transform:none}
+.right-stack .inspector-overlay .controller-card strong{font-size:12px;line-height:1.45;font-weight:500}
+.right-stack .inspector-overlay .phase-row{font-size:12px;line-height:1.4;padding:8px 0;gap:8px}
+.right-stack .inspector-overlay .phase-row strong{font-size:11px;font-weight:500;white-space:nowrap}
+.right-stack .inspector-overlay .flow-card{font-size:13px;line-height:1.4;font-weight:500}
+.right-stack .inspector-overlay .person-facts div{font-size:12px;line-height:1.45}
+.right-stack .inspector-overlay .person-facts dd{max-width:240px;overflow-wrap:anywhere}
+.right-stack .inspector-overlay .matrix span{font-size:11px;line-height:1.4;padding:6px}

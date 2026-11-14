@@ -49,10 +49,14 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 		if _, exists := graph.Intersections[intersection.ID]; exists {
 			return nil, fmt.Errorf("duplicate intersection %q", intersection.ID)
 		}
+		if intersection.Layer < 0 || intersection.Layer > 1 || math.IsNaN(intersection.Elevation) || math.IsInf(intersection.Elevation, 0) || intersection.Elevation < 0 || (intersection.Layer == 0 && intersection.Elevation != 0) || (intersection.Layer == 1 && intersection.Elevation <= 0) {
+			return nil, fmt.Errorf("intersection %s has invalid layer/elevation", intersection.ID)
+		}
 		angle := intersection.Rotation * math.Pi / 180
 		tangent := Vec2{X: math.Cos(angle), Y: math.Sin(angle)}
 		graph.Intersections[intersection.ID] = &Intersection{
 			ID: intersection.ID, Name: intersection.Name, Position: intersection.Position,
+			Layer: intersection.Layer, Elevation: intersection.Elevation, Interchange: intersection.Interchange,
 			Transform: Transform(intersection.Position, tangent),
 		}
 		trafficInputs[intersection.ID] = intersection.Traffic
@@ -117,7 +121,22 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 				carriagewayOffset = -carriagewayOffset
 			}
 		}
-		way := &Way{ID: input.ID, Name: input.Name, From: input.From, To: input.To, Lanes: input.Lanes,
+		if input.Structure == "" {
+			input.Structure = "ground"
+		}
+		if input.Structure != "ground" && input.Structure != "bridge" && input.Structure != "ramp" {
+			return nil, fmt.Errorf("way %s has invalid structure", input.ID)
+		}
+		if from.Elevation != to.Elevation && input.Structure != "ramp" {
+			return nil, fmt.Errorf("way %s changes elevation without a ramp", input.ID)
+		}
+		if input.Structure == "ground" && (from.Layer != 0 || to.Layer != 0) {
+			return nil, fmt.Errorf("ground way %s has elevated endpoints", input.ID)
+		}
+		if input.Structure == "bridge" && (from.Layer != 1 || to.Layer != 1) {
+			return nil, fmt.Errorf("bridge way %s needs elevated endpoints", input.ID)
+		}
+		way := &Way{Structure: input.Structure, StartElevation: from.Elevation, EndElevation: to.Elevation, ID: input.ID, Name: input.Name, From: input.From, To: input.To, Lanes: input.Lanes,
 			LaneWidth: input.LaneWidth, CarriagewayOffset: carriagewayOffset,
 			SpeedLimit: input.SpeedLimit, RoadClass: input.RoadClass, Demand: input.Demand,
 			Weight: input.Lanes, Points: points}
@@ -139,6 +158,16 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 
 	if len(graph.Ways) == 0 {
 		return nil, fmt.Errorf("at least one directed way is required")
+	}
+	hasGround := false
+	for _, way := range graph.Ways {
+		if way.Structure == "ground" {
+			hasGround = true
+			break
+		}
+	}
+	if !hasGround {
+		return nil, fmt.Errorf("at least one ground road is required for trip access")
 	}
 	for _, intersection := range graph.Intersections {
 		for _, way := range graph.Incoming[intersection.ID] {

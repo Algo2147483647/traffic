@@ -50,6 +50,9 @@ func run() error {
 	presets := []server.Preset{{ID: "preset-1", Graph: graph}}
 	if *presetDir != "" {
 		entries, err := model.LoadPresetDirectory(*presetDir)
+		if os.IsNotExist(err) {
+			err = nil
+		}
 		if err != nil {
 			return err
 		}

@@ -4,9 +4,10 @@
   const canvas = document.querySelector("#city-canvas");
   const dashboard = document.querySelector(".dashboard");
   let ctx = canvas.getContext("2d");
+  let renderStructure = null;
   const $ = (id) => document.getElementById(id);
   const state = {
-    city: null, snapshot: null, selected: null, showTransforms: false, transform: null,
+    city: null, snapshot: null, selected: null, layerFilter: "all", showTransforms: false, transform: null,
     camera: { zoom: 1, panX: 0, panY: 0 }, pointers: new Map(), laneDirections: new Map(), presetID: null,
     compute: { tick: null, measuredAt: 0, hz: null },
   };
@@ -112,14 +113,30 @@
     const { width, height } = currentTransform();
     ctx.clearRect(0, 0, width, height);
     drawBackdrop(width, height);
-    drawWays();
-    drawIntersectionPads();
-    drawSelectedTrip();
-    drawSignals();
-    drawLaneDirectionMarkings();
-    drawIntersections();
-    if (state.showTransforms) drawTransforms();
-    drawPeople();
+    for (const layer of ["ground", "ramp", "bridge"]) {
+      if (state.layerFilter !== "all" && state.layerFilter !== layer) continue;
+      renderStructure = layer;
+      drawWays(); drawIntersectionPads(); drawSelectedTrip(); drawSignals();
+      drawLaneDirectionMarkings(); drawIntersections(); drawPeople();
+    }
+    renderStructure = null;
+    const groups = new Map();
+    state.city.intersections.forEach(n => { if(n.interchange && !groups.has(n.interchange)) groups.set(n.interchange, n); });
+    ctx.font="12px Times New Roman"; ctx.fillStyle="#dddddd";
+    groups.forEach((n,id) => { const members=state.city.intersections.filter(i=>i.interchange===id), p=screen({x:members.reduce((a,n)=>a+n.position.x,0)/members.length,y:members.reduce((a,n)=>a+n.position.y,0)/members.length});ctx.fillText(id === "C" ? "Central diamond" : `${id} interchange`,p.x+12,p.y-28); });
+
+  }
+
+  function wayVisible(way) {
+    const structure = way.structure || "ground";
+    return renderStructure ? structure === renderStructure : state.layerFilter === "all" || structure === state.layerFilter;
+  }
+  function nodeVisible(node) {
+    const layer = node.layer ? "bridge" : "ground";
+    const filter = renderStructure || state.layerFilter;
+    if (filter === "all") return true;
+    if (filter === "ramp") return !renderStructure && state.city.ways.some(w=>w.structure === "ramp" && (w.from === node.id || w.to === node.id));
+    return layer === filter;
   }
 
   function drawBackdrop(width, height) {
@@ -131,13 +148,19 @@
     const scale = currentTransform().scale;
     const minimumWidths = { arterial: 4.8, ramp: 3.2, collector: 2.6, local: 1.35 };
     state.city.ways.forEach((way) => {
+      if (!wayVisible(way)) return;
       const length = wayLength(way), centre = (way.lanes - 1) / 2;
       const radius = state.city.simulation.intersection_radius || 22;
       const start = Math.min(radius, length/2), end = Math.max(start, length-radius);
       const physicalWidth = way.lanes * way.lane_width * scale;
       const width = Math.max(physicalWidth, minimumWidths[way.road_class] || 1.35);
+      if (way.structure === "bridge") {
+        ctx.save(); ctx.shadowColor="#000000"; ctx.shadowBlur=10*scale; ctx.shadowOffsetY=4*scale;
+        drawWayRange(way, start, end, centre, "#090909", width+8*scale, 0, "butt"); ctx.restore();
+      }
       drawWayRange(way, start, end, centre, "rgba(218,218,218,.3)", width + .8 * scale, 0, "butt");
       drawWayRange(way, start, end, centre, "#121212", Math.max(.1, width - .8 * scale), 0, "butt");
+      if (way.structure === "bridge") for (const side of [-1,1]) drawWayRange(way,start,end,centre,"#9a9a9a",1.2*scale,side*(way.lanes*way.lane_width/2+2),"butt");
       if (way.lane_width * scale >= 1.2) {
         for (let boundary = 1; boundary < way.lanes; boundary++) {
           ctx.setLineDash([Math.max(2, 5 * scale), Math.max(2, 5 * scale)]);
@@ -152,6 +175,7 @@
   function drawIntersectionPads() {
     const scale = currentTransform().scale, radius = state.city.simulation.intersection_radius || 22;
     state.city.intersections.forEach((intersection) => {
+      if (!nodeVisible(intersection)) return;
       const incoming=state.city.ways.filter((way)=>way.to===intersection.id),outgoing=state.city.ways.filter((way)=>way.from===intersection.id),corners=[];
       [...incoming.map((way)=>({way,along:Math.max(0,wayLength(way)-radius)})),...outgoing.map((way)=>({way,along:Math.min(radius,wayLength(way))}))].forEach(({way,along})=>{const sample=sampleWay(way,along,(way.lanes-1)/2),half=way.lanes*way.lane_width/2+2;corners.push({x:sample.x-sample.ty*half,y:sample.y+sample.tx*half},{x:sample.x+sample.ty*half,y:sample.y-sample.tx*half});});
       // Use the mouth edges as anchors, then blend the curb between approaches.
@@ -214,6 +238,7 @@
     if (!state.laneDirections.size) return;
     const radius = state.city.simulation.intersection_radius || 22;
     state.city.ways.forEach((way) => {
+      if (!wayVisible(way)) return;
       const byLane = state.laneDirections.get(way.id);
       if (!byLane) return;
       const stop = Math.max(0, wayLength(way) - radius);
@@ -282,7 +307,7 @@
     if (!person) return;
     const ways = Object.fromEntries(state.city.ways.map((way) => [way.id, way]));
     person.route.forEach((wayID, index) => {
-      const way = ways[wayID]; if (!way) return;
+      const way = ways[wayID]; if (!way || !wayVisible(way)) return;
       ctx.strokeStyle = index < person.route_index ? "rgba(239,200,91,.20)" : "rgba(255,255,255,.32)";
       ctx.lineWidth = 2.5; ctx.beginPath(); drawPolyline(way.points); ctx.stroke();
     });
@@ -298,6 +323,8 @@
     if (!state.snapshot?.signals) return;
     const ways = Object.fromEntries(state.city.ways.map((way) => [way.id, way]));
     state.snapshot.signals.forEach((signal) => {
+      const node=state.city.intersections.find(n=>n.id===signal.intersection_id);
+      if (!node || !nodeVisible(node) || node.traffic_control.mode === "flow") return;
       const greenLanes = new Map();
       (signal.allowed_movements || []).forEach((movement) => {
         const incoming = ways[movement.from_way_id], outgoing = ways[movement.to_way_id];
@@ -308,7 +335,7 @@
         const active=greenLanes.get(incoming.id)||new Set();fromLanes.forEach((lane)=>active.add(lane));greenLanes.set(incoming.id,active);
         const count=Math.max(fromLanes.length,toLanes.length),fallback=Array.from({length:count},(_,lane)=>({from_lane:fromLanes[Math.min(lane,fromLanes.length-1)],to_lane:toLanes[Math.min(lane,toLanes.length-1)]})),connections=movement.lane_connections?.length?movement.lane_connections:fallback;
         for (const connection of connections) {
-          const start=sampleWay(incoming,inStop,connection.from_lane),end=sampleWay(outgoing,outStart,connection.to_lane),a=screen(start),b=screen(end),handle=radius*.82*scale;
+          const start=sampleWay(incoming,inStop,connection.from_lane),end=sampleWay(outgoing,outStart,connection.to_lane),a=screen(start),b=screen(end),handle=Math.min(radius*.9,Math.hypot(end.x-start.x,end.y-start.y)*.45)*scale;
           ctx.strokeStyle="rgba(200,242,107,.82)";ctx.lineWidth=1.45*scale;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.bezierCurveTo(a.x+start.tx*handle,a.y+start.ty*handle,b.x-end.tx*handle,b.y-end.ty*handle,b.x,b.y);ctx.stroke();
         }
       });
@@ -327,6 +354,7 @@
     const selectedID = state.selected?.type === "intersection" ? state.selected.id : null;
     const denseOverview = state.city.intersections.length > 40 && state.camera.zoom < 4.5;
     state.city.intersections.forEach((intersection) => {
+      if (!nodeVisible(intersection)) return;
       const p = screen(intersection.position), signal = state.snapshot?.signals?.find((item) => item.intersection_id === intersection.id);
       const marker=selectedID===intersection.id?7:denseOverview?2.2:5,halo=denseOverview?1.6:2;ctx.fillStyle=selectedID===intersection.id?"#fff":"#dfe4d8";ctx.fillRect(p.x-marker,p.y-marker,marker*2,marker*2);ctx.strokeStyle=signal?.stage==="green"?"rgba(200,242,107,.9)":signal?.stage==="amber"?"rgba(239,200,91,.9)":"rgba(255,120,95,.65)";ctx.lineWidth=selectedID===intersection.id?2:1;ctx.strokeRect(p.x-marker*halo,p.y-marker*halo,marker*halo*2,marker*halo*2);
       if (selectedID === intersection.id || (!denseOverview && state.camera.zoom > .36)) { ctx.fillStyle = "rgba(235,238,228,.66)"; ctx.font = "9px ui-monospace,monospace"; ctx.fillText(`${intersection.id}  ${intersection.name.toUpperCase()}`, p.x + 13, p.y - 8); }
@@ -345,6 +373,8 @@
     if (!state.snapshot) return;
     const scale = currentTransform().scale, ways = Object.fromEntries(state.city.ways.map((way) => [way.id, way]));
     state.snapshot.people.forEach((person) => {
+      const structure = person.structure || "ground";
+      if (renderStructure && structure !== renderStructure) return;
       const p = screen(person.position), selected = state.selected?.type === "person" && state.selected.id === person.id;
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(person.heading_degrees * Math.PI / 180);
       if (person.state.startsWith("walking") || person.state === "arrived") {
@@ -386,7 +416,7 @@
 
   function updateCity(city) {
     state.city = city; state.laneDirections = buildLaneDirections(city);
-    $("intersection-count").textContent = city.intersections.length; $("way-count").textContent = city.ways.length;
+    $("intersection-count").textContent = city.intersections.filter(n=>n.traffic_control.mode !== "flow").length; $("way-count").textContent = city.ways.length;
     $("lane-count").textContent = city.edges.reduce((sum, edge) => sum + edge.weight, 0);
     state.compute = { tick: null, measuredAt: performance.now(), hz: null };
     const targetHz = 1000 / Math.max(1, Number(city.simulation.tick_ms || 50));
@@ -419,15 +449,14 @@
     const intersection = state.city?.intersections.find((item) => item.id === intersectionID), signal = state.snapshot?.signals?.find((item) => item.intersection_id === intersectionID);
     if (!intersection || !signal) return;
     $("signal-name").textContent = `${intersection.id} / ${intersection.name}`; $("signal-countdown").textContent = `${signal.remaining_seconds.toFixed(1)}s`;
-    $("signal-phase").textContent = `${signal.phase_name} · ${(signal.stage || "green").replace("_", " ")}`;
-    $("signal-next").textContent = `Next: ${signal.next_phase_name || intersection.traffic_control.phases[(signal.phase_index + 1) % intersection.traffic_control.phases.length].name}`;
     $("signal-controller").textContent = signal.controller || "fixed-time"; $("signal-decision").textContent = signal.decision || "scheduled";
     $("signal-green-target").textContent = `${(signal.base_green_seconds || 0).toFixed(1)} → ${(signal.target_green_seconds || 0).toFixed(1)}s`;
     $("signal-pressure").textContent = `${(signal.queue_pressure || 0).toFixed(1)} / ${(signal.competing_pressure || 0).toFixed(1)}`;
     $("signal-plan").replaceChildren(...intersection.traffic_control.phases.map((phase, index) => {
-      const row = document.createElement("div"); row.className = `phase-row ${index === signal.phase_index ? "active" : ""}`;
+      const row = document.createElement("div"); row.className = `phase-row ${index === signal.phase_index && signal.stage === "green" ? "active" : ""} ${phase.id === signal.next_phase_id ? "next" : ""}`;
+      row.title = phase.id === signal.next_phase_id ? "Next phase" : index === signal.phase_index && signal.stage === "green" ? "Active phase" : "";
       const dot = document.createElement("i"), name = document.createElement("span"), duration = document.createElement("strong");
-      name.textContent = phase.name; duration.textContent = `${phase.duration_seconds}s · ${phase.min_green_seconds || phase.duration_seconds}–${phase.max_green_seconds || phase.duration_seconds}s`; row.append(dot, name, duration); return row;
+      name.textContent = `Phase ${index + 1}`; duration.textContent = `${phase.duration_seconds}s · ${phase.min_green_seconds || phase.duration_seconds}–${phase.max_green_seconds || phase.duration_seconds}s`; row.append(dot, name, duration); return row;
     }));
     const phases = intersection.traffic_control.phases;
     const container = $("signal-movements");
@@ -437,8 +466,8 @@
       container.replaceChildren(...phases.map((phase, index) => {
         const card = document.createElement("div"); card.className = "flow-card";
         card.dataset.phaseIndex = index;
-        const title = document.createElement("div"); title.textContent = phase.name || `Phase ${index + 1}`;
-        const status = document.createElement("small"); card.append(title,status);
+        const title = document.createElement("div"); title.textContent = `Phase ${index + 1}`;
+        card.append(title);
         const copy = document.createElement("canvas"); copy.width = 680; copy.height = 520;
         copy.style.width = "100%"; copy.style.height = "auto";
         copy.setAttribute("aria-label", `${intersection.id}: ${title.textContent}`);
@@ -448,14 +477,14 @@
     }
     [...container.children].forEach(card => {
       const active=signal.stage === "green" && Number(card.dataset.phaseIndex) === signal.phase_index;
-      card.classList.toggle("flow-active",active);card.querySelector("small").textContent=active ? "Active phase" : "Waiting";
+      card.classList.toggle("flow-active",active);
     });
   }
 
   function drawJunctionCopy(copy, intersection, phase) {
-    const saved = { ctx, city: state.city, snapshot: state.snapshot, transform: state.transform, camera: state.camera };
+    const saved = { ctx, renderStructure, layerFilter:state.layerFilter, city: state.city, snapshot: state.snapshot, transform: state.transform, camera: state.camera };
     try {
-      ctx = copy.getContext("2d");
+      ctx = copy.getContext("2d"); renderStructure=null; state.layerFilter="all";
       const ways = saved.city.ways.filter(w => w.from === intersection.id || w.to === intersection.id);
       const radius = saved.city.simulation.intersection_radius || 22;
       // Fit the junction mouth geometry, rather than long approach roads.
@@ -479,7 +508,7 @@
       ctx.fillStyle = "#e6ecdf"; ctx.font = "16px sans-serif";
       ctx.fillText(intersection.id, 12, 22);
     } finally {
-      ctx = saved.ctx; state.city = saved.city; state.snapshot = saved.snapshot;
+      ctx = saved.ctx; renderStructure=saved.renderStructure; state.layerFilter=saved.layerFilter; state.city = saved.city; state.snapshot = saved.snapshot;
       state.transform = saved.transform; state.camera = saved.camera;
     }
   }
@@ -542,16 +571,33 @@
   canvas.addEventListener("click", (event) => {
     if (!state.snapshot || !state.transform) return; const click = canvasPoint(event);
     let intersectionMatch = null, intersectionDistance = 18;
-    state.city.intersections.forEach((item) => { const p = screen(item.position), d = Math.hypot(p.x - click.x, p.y - click.y); if (d < intersectionDistance) { intersectionMatch = item; intersectionDistance = d; } });
+    state.city.intersections.filter(nodeVisible).sort((a,b)=>(a.layer||0)-(b.layer||0)).forEach((item) => { const p = screen(item.position), d = Math.hypot(p.x - click.x, p.y - click.y); if (d < intersectionDistance) { intersectionMatch = item; intersectionDistance = d; } });
     if (intersectionMatch) state.selected = { type: "intersection", id: intersectionMatch.id };
-    else { let personMatch = null, distance = 13; state.snapshot.people.forEach((person) => { const p = screen(person.position), d = Math.hypot(p.x - click.x, p.y - click.y); if (d < distance) { personMatch = person; distance = d; } }); if (personMatch) state.selected = { type: "person", id: personMatch.id }; }
+    else { let personMatch = null, distance = 13; state.snapshot.people.filter(p=>state.layerFilter === "all" || (p.structure||"ground") === state.layerFilter).forEach((person) => { const p = screen(person.position), d = Math.hypot(p.x - click.x, p.y - click.y); if (d < distance) { personMatch = person; distance = d; } }); if (personMatch) state.selected = { type: "person", id: personMatch.id }; }
     refreshInspector(); draw();
   });
 
   $("pause-button").addEventListener("click", () => control(state.snapshot?.paused ? "resume" : "pause")); $("step-button").addEventListener("click", () => control("step", { delta: .05 }));
   $("reset-button").addEventListener("click", () => { state.selected = null; control("reset"); }); $("time-scale").addEventListener("change", (event) => control("set_time_scale", { time_scale: Number(event.target.value) }));
+  $("inspector-toggle").addEventListener("click", () => {
+    const collapsed = document.querySelector(".right-stack").classList.toggle("collapsed");
+    $("inspector-toggle").textContent = collapsed ? "‹" : "›";
+    $("inspector-toggle").setAttribute("aria-expanded", String(!collapsed));
+    $("inspector-toggle").setAttribute("aria-label", collapsed ? "Expand details" : "Collapse details");
+    $("inspector-toggle").title = collapsed ? "Expand details" : "Collapse details";
+  });
+  const settingsToggle = $("settings-toggle"), settingsPanel = $("settings-panel");
+  function toggleSettings(open) {
+    settingsPanel.hidden = !open; settingsToggle.setAttribute("aria-expanded", String(open));
+    if (open) $("settings-close").focus(); else settingsToggle.focus();
+  }
+  settingsToggle.addEventListener("click", () => toggleSettings(settingsPanel.hidden));
+  $("settings-close").addEventListener("click", () => toggleSettings(false));
+  document.addEventListener("keydown", event => { if (event.key === "Escape" && !settingsPanel.hidden) toggleSettings(false); });
+  $("layer-filter").addEventListener("change", event => {
+    state.layerFilter=event.target.value; state.selected=null; refreshInspector(); draw();
+  });
   $("map-preset").addEventListener("change", (event) => switchPreset(event.target.value));
-  $("show-transforms").addEventListener("change", (event) => { state.showTransforms = event.target.checked; draw(); });
   $("zoom-in-button").addEventListener("click", () => zoomAt(1.5, state.transform.width / 2, state.transform.height / 2)); $("zoom-out-button").addEventListener("click", () => zoomAt(1 / 1.5, state.transform.width / 2, state.transform.height / 2)); $("fit-button").addEventListener("click", resetView);
   $("fullscreen-button").addEventListener("click", async () => { if (document.fullscreenElement) await document.exitFullscreen(); else await dashboard.requestFullscreen(); });
   const loadControls = [["population-control","population-value",(value) => value],["spawn-rate-control","spawn-rate-value",(value) => `${Number(value).toFixed(1)}/s`],["max-population-control","max-population-value",(value) => value]];

@@ -110,19 +110,24 @@ type TrafficMovementConfig struct {
 }
 
 type TrafficControlConfig struct {
+	Mode          string               `json:"mode,omitempty"`
 	OffsetSeconds float64              `json:"offset_seconds"`
 	Phases        []TrafficPhaseConfig `json:"phases"`
 }
 
 type IntersectionConfig struct {
-	ID       string               `json:"id"`
-	Name     string               `json:"name"`
-	Position Vec2                 `json:"position"`
-	Rotation float64              `json:"rotation_degrees,omitempty"`
-	Traffic  TrafficControlConfig `json:"traffic_control,omitempty"`
+	Layer       int                  `json:"layer,omitempty"`
+	Elevation   float64              `json:"elevation,omitempty"`
+	Interchange string               `json:"interchange,omitempty"`
+	ID          string               `json:"id"`
+	Name        string               `json:"name"`
+	Position    Vec2                 `json:"position"`
+	Rotation    float64              `json:"rotation_degrees,omitempty"`
+	Traffic     TrafficControlConfig `json:"traffic_control,omitempty"`
 }
 
 type WayConfig struct {
+	Structure  string  `json:"structure,omitempty"`
 	ID         string  `json:"id"`
 	Name       string  `json:"name"`
 	From       string  `json:"from"`
@@ -200,6 +205,9 @@ type Approach struct {
 }
 
 type Intersection struct {
+	Layer          int            `json:"layer"`
+	Elevation      float64        `json:"elevation"`
+	Interchange    string         `json:"interchange,omitempty"`
 	ID             string         `json:"id"`
 	Name           string         `json:"name"`
 	Position       Vec2           `json:"position"`
@@ -209,6 +217,7 @@ type Intersection struct {
 }
 
 type TrafficControl struct {
+	Mode          string               `json:"mode,omitempty"`
 	OffsetSeconds float64              `json:"offset_seconds"`
 	CycleSeconds  float64              `json:"cycle_seconds"`
 	Phases        []TrafficPhaseConfig `json:"phases"`
@@ -225,12 +234,15 @@ type TrafficControl struct {
 }
 
 type Way struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	From      string  `json:"from"`
-	To        string  `json:"to"`
-	Lanes     int     `json:"lanes"`
-	LaneWidth float64 `json:"lane_width"`
+	Structure      string  `json:"structure"`
+	StartElevation float64 `json:"start_elevation"`
+	EndElevation   float64 `json:"end_elevation"`
+	ID             string  `json:"id"`
+	Name           string  `json:"name"`
+	From           string  `json:"from"`
+	To             string  `json:"to"`
+	Lanes          int     `json:"lanes"`
+	LaneWidth      float64 `json:"lane_width"`
 	// CarriagewayOffset separates opposite directed ways while keeping every
 	// lane transform relative to the configured road centre line.
 	CarriagewayOffset float64   `json:"carriageway_offset"`

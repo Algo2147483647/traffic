@@ -13,6 +13,20 @@ type phaseDraft struct {
 }
 
 func planTrafficControl(intersection *Intersection, input TrafficControlConfig, incoming, outgoing []*Way, rules MovementRulesConfig, drivingSide string, intersectionRadius float64) (TrafficControl, error) {
+	if input.Mode != "" && input.Mode != "flow" {
+		return TrafficControl{}, fmt.Errorf("unknown control mode %s", input.Mode)
+	}
+	if input.Mode == "flow" {
+		if len(incoming) != 1 && len(outgoing) != 1 {
+			return TrafficControl{}, fmt.Errorf("flow node %s must be a simple merge or split", intersection.ID)
+		}
+		phase := TrafficPhaseConfig{ID: "flow", Name: "Merge / diverge", DurationSeconds: 3600}
+		for _, from := range incoming {
+			phase.AllowedIncoming = append(phase.AllowedIncoming, from.ID)
+			phase.AllowedMovements = append(phase.AllowedMovements, makeApproachMovements(from, outgoing, rules, drivingSide)...)
+		}
+		return TrafficControl{Mode: "flow", Phases: []TrafficPhaseConfig{phase}, CycleSeconds: 3600, PlanningBasis: "Unsignalized merge / diverge with receiving-lane storage checks", TimingMethod: "Continuous flow"}, nil
+	}
 	generated := len(input.Phases) == 0
 	phases := append([]TrafficPhaseConfig(nil), input.Phases...)
 	if generated {

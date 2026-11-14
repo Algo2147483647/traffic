@@ -25,17 +25,38 @@ async function createWindow() {
   await window.loadURL(backend.url + '/');
   if (smoke) {
     const result = await window.webContents.executeJavaScript(`(async () => {
+      const errors=[];window.addEventListener('error',event=>errors.push(event.message));
       const wait = ms => new Promise(r => setTimeout(r, ms));
-      for (let i = 0; i < 100 && document.querySelector('#map-preset').disabled; i++) await wait(100);
-      if (document.querySelector('#map-preset').disabled) throw Error('Map selector did not load');
+      for (let i = 0; i < 100 && document.querySelector('#map-preset').options[0]?.value !== "preset-1"; i++) await wait(100);
+      if (document.querySelector('#map-preset').options[0]?.value !== "preset-1") throw Error('Map selector did not load');
       const get = p => fetch(p).then(r => r.json());
       const control = body => fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => { if (!r.ok) throw Error('Control failed'); return r.json(); });
+      const preset = ${JSON.stringify(process.env.TRAFFIC_SMOKE_PRESET || '')};
+      if (preset) { await control({action:'set_preset',preset_id:preset}); await wait(800); }
+      document.querySelector('#settings-toggle').click();
+      if (document.querySelector('#settings-panel').hidden) throw Error('Settings did not open');
+      for (const layer of ['ground','bridge','ramp','all']) {
+        const select=document.querySelector('#layer-filter');select.value=layer;select.dispatchEvent(new Event('change'));await wait(80);
+      }
+      document.querySelector('#settings-close').click();
       await control({ action: 'pause' });
       if (!(await get('/api/snapshot')).paused) throw Error('Pause failed');
       await control({ action: 'resume' });
       const before = await get('/api/snapshot'); await wait(400);
       const after = await get('/api/snapshot');
       if (after.time <= before.time) throw Error('Simulation did not advance');
+      if (preset && ${JSON.stringify(process.env.TRAFFIC_SMOKE_DETAIL === '1')}) {
+        const canvas=document.querySelector('#city-canvas'), rect=canvas.getBoundingClientRect();
+        canvas.dispatchEvent(new WheelEvent('wheel',{clientX:rect.width/2,clientY:rect.height/2,deltaY:-1300,bubbles:true,cancelable:true}));
+        await wait(300);
+        const city=await get('/api/city'), node=city.intersections.find(n=>n.id==='C_North_terminal');
+        const scale=Math.min((rect.width-68)/(city.bounds.max_x-city.bounds.min_x),(rect.height-68)/(city.bounds.max_y-city.bounds.min_y))*Math.exp(1.95);
+        canvas.dispatchEvent(new MouseEvent('click',{clientX:rect.width/2+(node.position.x-3000)*scale,clientY:rect.height/2+(node.position.y-3000)*scale,bubbles:true}));
+        await wait(200);
+        if(document.querySelector('#signal-inspector').hidden) throw Error('Junction details did not open');
+        if(document.querySelectorAll('#signal-movements canvas').length!==node.traffic_control.phases.length) throw Error('Phase diagrams missing');
+      }
+      if(errors.length) throw Error(errors.join('; '));
       if (typeof require !== 'undefined') throw Error('Renderer has Node access');
       return { title: document.title, people: after.people.length, time: after.time, presets: document.querySelector('#map-preset').options.length };
     })()`);

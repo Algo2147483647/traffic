@@ -88,11 +88,28 @@ The top-bar map selector exposes two live presets:
 
 - **Preset 1 — Meridian Hierarchy** keeps the JSON map supplied through
   `-config` (the existing `configs/meridian-city.json` by default).
-- **Preset 2 — Atlas Metropolitan Grid** provides a 16 km, four-by-four main
-  grid with four lanes per direction. Roads at 2 km intervals subdivide each
-  main cell with three lanes per direction; the former 1 km local grid has
-  been removed. Switching presets resets vehicles and signal controllers to
-  that map's initial state without restarting the server.
+- **Preset 2 — Four-Cell Interchange Network** is a separate 6,000 × 6,000
+  world-unit four-cell grid. The central diamond and four three-arm folded
+  diamonds each have two ground ramp terminals, two independent bridge
+  carriageways, and four interchange ramps. The outer folded diamonds have
+  one surface branch; the central diamond has north and south branches.
+  There are 60 nodes and 96 directed ways. Bridge crossings do not share nodes
+  with surface roads. Merge/diverge nodes use continuous flow with existing
+  downstream lane reservation and storage checks; ramp terminals retain signals.
+
+In Settings, **LAYER** selects **All layers / Ground / Bridges / Ramps**.
+Bridge decks and vehicles render above surface roads; ramps connect the levels.
+Click a terminal for its phase diagrams. Layer selection changes visibility,
+not the running simulation. Trip endpoints attach only to ground roads.
+
+`structure` on each way is `ground`, `bridge`, or `ramp`; nodes carry `layer`,
+`elevation`, and an `interchange` group. Elevation interpolates along ramps and
+is included in person snapshots. Heights currently control topology metadata
+and drawing: grades do not yet change engine power, acceleration, or speed.
+The merge policy reserves receiving lanes; it does not model highway priority
+or driver gap acceptance. Geometry uses simulation world units, not a certified
+civil-engineering design. Regenerate this preset using
+`python scripts/generate_interchange_map.py`.
 
 Additional presets are ordinary city JSON files in `configs/presets/`. The
 server discovers all `*.json` files in filename order at startup, using each

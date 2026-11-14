@@ -27,9 +27,9 @@ test('bundled engine authenticates, simulates, switches presets, streams, and ex
   await control({ action: 'step', delta: 0.05 });
   assert.ok((await get('/api/snapshot')).time > paused.time);
   const presets = await get('/api/presets');
-  assert.ok(presets.presets.length >= 2);
-  await control({ action: 'set_preset', preset_id: presets.presets[1].id });
-  assert.equal((await get('/api/city')).name, presets.presets[1].name);
+  assert.equal(presets.presets.length, 2);
+  await control({ action: 'set_preset', preset_id: 'four-cell-interchanges' });
+  assert.equal((await get('/api/city')).name, 'Four-Cell Interchange Network');
   const abort = new AbortController();
   const stream = await fetch(backend.url + '/api/stream', { headers, signal: abort.signal });
   const { value } = await stream.body.getReader().read();

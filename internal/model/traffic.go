@@ -89,6 +89,9 @@ type LaneProjection struct {
 func (graph *Graph) NearestLane(point Vec2) LaneProjection {
 	best := LaneProjection{Distance: math.Inf(1)}
 	for _, way := range graph.SortedWays() {
+		if way.Structure == "bridge" || way.Structure == "ramp" {
+			continue
+		}
 		projection := way.Project(point)
 		for lane := 0; lane < way.Lanes; lane++ {
 			position, tangent := way.Sample(projection.Along, lane)

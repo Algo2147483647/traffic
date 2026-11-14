@@ -11,11 +11,13 @@
   <main class="dashboard">
     <canvas id="city-canvas" tabindex="0" aria-label="Interactive lane-level map of Meridian City traffic"></canvas>
 
-    <header class="glass top-overlay">
+    <button id="settings-toggle" class="settings-toggle quiet" aria-label="Settings" aria-expanded="false" aria-controls="settings-panel" title="Settings"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><polygon points="19.00,12.00 20.83,13.76 20.31,15.44 17.82,15.89 16.95,16.95 17.00,19.48 15.44,20.31 13.37,18.87 12.00,19.00 10.24,20.83 8.56,20.31 8.11,17.82 7.05,16.95 4.52,17.00 3.69,15.44 5.13,13.37 5.00,12.00 3.17,10.24 3.69,8.56 6.18,8.11 7.05,7.05 7.00,4.52 8.56,3.69 10.63,5.13 12.00,5.00 13.76,3.17 15.44,3.69 15.89,6.18 16.95,7.05 19.48,7.00 20.31,8.56 18.87,10.63" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
+    <header id="settings-panel" class="glass top-overlay" hidden role="dialog" aria-label="Simulation settings">
+      <button id="settings-close" class="quiet" aria-label="Close settings">×</button>
       <div class="simulation-controls" aria-label="Simulation controls">
         <label class="select-control preset-control">MAP<select id="map-preset" aria-label="Map preset" disabled><option>Loading maps…</option></select></label>
-        <span class="divider"></span>
-        <div class="clock-block"><span>SIM TIME</span><strong id="sim-time">00:00.0</strong></div>
+        <label class="select-control">LAYER<select id="layer-filter" aria-label="Map layer"><option value="all">All layers</option><option value="ground">Ground</option><option value="bridge">Bridges</option><option value="ramp">Ramps</option></select></label>
+
         <div class="clock-block frequency-block" title="Measured simulation updates per second"><span>COMPUTE</span><strong id="compute-rate">— Hz</strong></div>
         <button id="pause-button" type="button">Pause</button>
         <button id="step-button" type="button" class="quiet">Step</button>
@@ -29,24 +31,26 @@
         <span id="view-scale" class="view-scale">100%</span>
       </div>
       <div class="connection" role="status" aria-live="polite"><span class="connection-dot"></span><span id="connection-label">CONNECTING</span></div>
-    </header>
-
-    <section class="glass stats-overlay" aria-label="Live traffic statistics">
-      <div class="stat-primary"><strong id="people-count">—</strong><span>population</span></div>
-      <div class="stat-row"><span><i class="dot driving"></i>Driving <b id="driving-count">—</b></span><span><i class="dot waiting"></i>Waiting <b id="waiting-count">—</b></span><span><i class="dot walking"></i>Walking <b id="walking-count">—</b></span></div>
-      <div class="stat-meta"><span><b id="average-speed">—</b> avg speed</span><span><b id="way-count">—</b> ways / <b id="intersection-count">—</b> signals / <b id="lane-count">—</b> lanes</span></div>
-      <div class="efficiency-row"><span><b id="signal-queue">—</b>signal queue</span><span><b id="throughput">—</b>trips/min</span><span><b id="mean-delay">—</b>mean delay</span></div>
-    </section>
-
-    <aside class="right-stack">
       <section class="glass load-overlay">
-        <div class="panel-heading"><div><p>TRAFFIC LOAD</p><h2>Population density</h2></div><span id="load-current">—</span></div>
+        <div class="panel-heading"><div><h2>Population density</h2></div><span id="load-current">—</span></div>
         <label class="range-control"><span>Active population <b id="population-value">240</b></span><input id="population-control" type="range" min="20" max="10000" step="20" value="240"></label>
         <label class="range-control"><span>Spawn rate <b id="spawn-rate-value">1.5/s</b></span><input id="spawn-rate-control" type="range" min="0" max="20" step="0.5" value="1.5"></label>
         <label class="range-control"><span>Population cap <b id="max-population-value">900</b></span><input id="max-population-control" type="range" min="100" max="10000" step="100" value="900"></label>
         <label class="range-control"><span>Vehicle spacing <b id="safe-gap-value">4 m</b></span><input id="safe-gap-control" type="range" min="4" max="80" step="2" value="4"></label>
         <button id="apply-load-button" type="button" class="apply-load">Apply traffic load</button>
       </section>
+    </header>
+
+    <section class="glass stats-overlay" aria-label="Live traffic statistics">
+      <div class="stat-primary"><div><strong id="people-count">—</strong><span>population</span></div><strong id="sim-time" aria-label="Simulation time">00:00.0</strong></div>
+      <div class="stat-row"><span><i class="dot driving"></i>Driving <b id="driving-count">—</b></span><span><i class="dot waiting"></i>Waiting <b id="waiting-count">—</b></span><span><i class="dot walking"></i>Walking <b id="walking-count">—</b></span></div>
+      <div class="stat-meta"><span><b id="average-speed">—</b> avg speed</span><span><b id="way-count">—</b> ways / <b id="intersection-count">—</b> signals / <b id="lane-count">—</b> lanes</span></div>
+      <div class="efficiency-row"><span><b id="signal-queue">—</b>signal queue</span><span><b id="throughput">—</b>trips/min</span><span><b id="mean-delay">—</b>mean delay</span></div>
+    </section>
+
+    <aside class="right-stack">
+      <button id="inspector-toggle" class="quiet" aria-label="Collapse details" aria-expanded="true" title="Collapse details">›</button>
+
 
       <section class="glass inspector-overlay">
         <div id="empty-inspector" class="empty-state">Select a vehicle or junction</div>
@@ -56,16 +60,13 @@
           <p class="matrix-label">LOCAL TRANSFORM</p><div id="person-matrix" class="matrix"></div>
         </div>
         <div id="signal-inspector" hidden>
-          <div class="panel-heading"><div><p>SIGNAL PLAN</p><h2 id="signal-name">Intersection A</h2></div><span id="signal-countdown">0.0s</span></div>
-          <p id="signal-phase" class="active-phase">Current phase</p><p id="signal-next" class="next-phase">Next phase</p>
+          <div class="panel-heading"><div><h2 id="signal-name">Intersection A</h2></div><span id="signal-countdown">0.0s</span></div>
           <div class="controller-card"><div><span>Controller</span><strong id="signal-controller">—</strong></div><div><span>Decision</span><strong id="signal-decision">—</strong></div><div><span>Green target</span><strong id="signal-green-target">—</strong></div><div><span>Pressure</span><strong id="signal-pressure">—</strong></div></div>
-          <div id="signal-plan" class="signal-plan"></div><p class="matrix-label">SIGNAL PHASES · ALL PERMITTED MOVEMENTS</p><div id="signal-movements" class="movement-list"></div>
+          <div id="signal-plan" class="signal-plan"></div><div id="signal-movements" class="movement-list"></div>
         </div>
       </section>
     </aside>
 
-    <div class="glass map-key"><label><input id="show-transforms" type="checkbox">Axes</label></div>
-    <p class="map-help">Drag to pan · wheel or pinch to zoom · select a vehicle or junction</p>
   </main>
   <script src="/app.js" defer></script>
 </body>
