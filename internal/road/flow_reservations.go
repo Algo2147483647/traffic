@@ -98,16 +98,17 @@ func (s *Simulation) reserveFlowLocked() {
 		if !ok {
 			continue
 		}
+		continuation := len(s.graph.Incoming[w.To]) == 2 && len(s.graph.Outgoing[w.To]) == 2
 		blocked := false
 		for id, r := range s.reservations {
-			if id != p.id && (r.node == w.To || (r.to == next.ID)) {
+			if id != p.id && ((r.node == w.To && !continuation) || (r.to == next.ID)) {
 				blocked = true
 				break
 			}
 		}
 		// Turning signal-controlled traffic also owns its receiving lane/node.
 		for _, other := range s.people {
-			if other != p && other.state == "turning" && s.graph.Ways[other.wayID].To == w.To {
+			if other != p && other.state == "turning" && s.graph.Ways[other.wayID].To == w.To && (!continuation || other.nextWayID == next.ID) {
 				blocked = true
 				break
 			}

@@ -58,6 +58,45 @@ for (x,y),id in grid.items():
 for a,b in sorted(edges):
     if a in axis and b in axis:continue
     pair(grid[a],grid[b],p['grid_lanes_per_direction'],kind='local')
+# Complete the inner square with grade-separated axis crossings.
+h=p['central_grid_half_width_m']
+for x in [-h,h]:
+    for y in [-h,h]:node(f'I_{x}_{y}',cx+x,cy+y)
+for sign in [-1,1]:
+    for axis_name in ['H','V']:
+        def pos(v):return (v,sign*h) if axis_name=='H' else (sign*h,v)
+        sequence=[]
+        values=[-h,-p['tunnel_ramp_outer_m'],-p['tunnel_half_length_m'],p['tunnel_half_length_m'],p['tunnel_ramp_outer_m'],h]
+        for i,v in enumerate(values):
+            x,y=pos(v)
+            if i in (0,len(values)-1):id=f'I_{x}_{y}'
+            else:
+                level=-1 if i in (2,3) else 0
+                id=node(f'T_{axis_name}_{sign}_{i}',cx+x,cy+y,level,flow=True)
+                nodes[id]['elevation']=-p['tunnel_depth_m'] if level else 0
+            sequence.append(id)
+        for a,b in zip(sequence,sequence[1:]):
+            la,lb=nodes[a]['layer'],nodes[b]['layer'];structure='ramp' if la!=lb else 'tunnel' if la<0 else 'ground'
+            way(a,b,1,structure,kind='local');way(b,a,1,structure,kind='local')
+        for v,end in [(-2*h,sequence[0]),(2*h,sequence[-1])]:
+            x,y=pos(v);pair(f'G_{x}_{y}',end,1,kind='local')
+# Split the inner ring at four diagonal entry junctions.
+if p['corner_ring_access']:
+    radius=p['road_inner_radius_m'];cardinal={f'{a}_{radius}' for a in ['E','S','W','N']}
+    city['ways']=[w for w in city['ways'] if not(w['from'] in cardinal and w['to'] in cardinal)]
+    ring=[]
+    for i in range(8):
+        angle=i*math.pi/4
+        if i%2==0:id=f'{["E","S","W","N"][i//2]}_{radius}'
+        else:
+            sx=1 if math.cos(angle)>0 else -1;sy=1 if math.sin(angle)>0 else -1
+            id=node(f'RingCorner_{sx}_{sy}',cx+radius*math.cos(angle),cy+radius*math.sin(angle))
+            for x,y in [(sx*1000,sy*1500),(sx*1500,sy*1000)]:pair(f'G_{x}_{y}',id,1,kind='collector')
+        ring.append(id)
+    for i,a in enumerate(ring):
+        count=math.ceil(math.pi*radius/4/p['sample_spacing_m'])
+        pts=[(cx+radius*math.cos((i+j/count)*math.pi/4),cy+radius*math.sin((i+j/count)*math.pi/4)) for j in range(1,count)]
+        pair(a,ring[(i+1)%8],p['inner_lanes_per_direction'],pts)
 compile_flow_connections(city)
 for w in city['ways']:w['speed_limit']=min(w['speed_limit'],p['speed_limit_kmh']/3.6)
 (OUT/'road.json').write_text(json.dumps(city,indent=2)+'\n')
@@ -76,6 +115,7 @@ def locate(points,c,target):
         if dist<best[0]:best=(dist,c[i]+t*math.sqrt(den))
     return best[1] % c[-1]
 for line in metro['lines']:
+    line['layer']=p['metro_first_layer']-line['id']
     old=line['stations'];ox,oy=old[len(old)//2]['x'],old[len(old)//2]['y']
     dx,dy=old[-1]['x']-ox,old[-1]['y']-oy;length=math.hypot(dx,dy);ux,uy=dx/length,dy/length
     scale=p['metro_axis_radius_m']/length
@@ -95,5 +135,12 @@ for direction,radius in [(1,R+half),(-1,R-half)]:
     routes.append(pts);chains.append(chain(pts))
 ring=dict(id=3,name='Orbital Line',layer=p['metro_ring_layer'],circular=True,stations=[dict(x=cx+R*math.cos(i*math.pi/3),y=cy+R*math.sin(i*math.pi/3)) for i in range(6)],route=routes[0],reverse_route=routes[1],stop_chainages=[[chains[0][i*count//6],chains[1][((6-i)%6)*count//6]] for i in range(6)],crossing_station=-1,loop_speed_kmh=300)
 metro['lines'].append(ring)
+metro['highest_layer']=p['metro_first_layer']
+metro['transfers']=[]
+for i,station in enumerate(ring['stations']):
+    for line in metro['lines'][:3]:
+        for j,other in enumerate(line['stations']):
+            if math.hypot(station['x']-other['x'],station['y']-other['y'])<.001:
+                metro['transfers'].append(dict(id=f'X{i+1}',name=f'Exchange {i+1}',a=[line['id'],j],b=[ring['id'],i],seconds=p['transfer_walk_seconds']))
 (OUT/'metro.json').write_text(json.dumps(metro,indent=2)+'\n')
 print(f'Map 3: {len(nodes)} nodes, {len(city["ways"])} directed roads, {len(metro["lines"])} metro lines')

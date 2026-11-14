@@ -9,13 +9,15 @@ import (
 )
 
 type Layout struct {
-	CarLength    float64    `json:"car_length_m"`
-	CarWidth     float64    `json:"car_width_m"`
-	TunnelWidth  float64    `json:"tunnel_inner_diameter_m"`
-	TunnelOuter  float64    `json:"tunnel_outer_diameter_m"`
-	TrackSpacing float64    `json:"track_spacing_m"`
-	Defaults     Config     `json:"defaults"`
-	Lines        []LineSpec `json:"lines"`
+	HighestLayer int            `json:"highest_layer,omitempty"`
+	Transfers    []TransferSpec `json:"transfers,omitempty"`
+	CarLength    float64        `json:"car_length_m"`
+	CarWidth     float64        `json:"car_width_m"`
+	TunnelWidth  float64        `json:"tunnel_inner_diameter_m"`
+	TunnelOuter  float64        `json:"tunnel_outer_diameter_m"`
+	TrackSpacing float64        `json:"track_spacing_m"`
+	Defaults     Config         `json:"defaults"`
+	Lines        []LineSpec     `json:"lines"`
 }
 type LineSpec struct {
 	Circular        bool         `json:"circular,omitempty"`
@@ -58,9 +60,12 @@ func (l *Layout) Validate() error {
 	if err := New(nil, l.Defaults).Configure(l.Defaults); err != nil {
 		return fmt.Errorf("metro defaults: %w", err)
 	}
+	if l.HighestLayer > 0 || l.HighestLayer < -16 {
+		return fmt.Errorf("invalid highest metro layer")
+	}
 	ids := map[int]bool{}
 	for _, s := range l.Lines {
-		if ids[s.ID] || s.ID < 0 || s.Layer >= 0 || s.Layer < -16 || len(s.Stations) < 3 || len(s.Route) < 4 || len(s.Stops) != len(s.Stations) || s.CrossingStation >= len(s.Stations) || s.LoopSpeed <= 0 {
+		if ids[s.ID] || s.ID < 0 || s.Layer >= 0 || (l.HighestLayer < 0 && s.Layer > l.HighestLayer) || s.Layer < -16 || len(s.Stations) < 3 || len(s.Route) < 4 || len(s.Stops) != len(s.Stations) || s.CrossingStation >= len(s.Stations) || s.LoopSpeed <= 0 {
 			return fmt.Errorf("invalid metro line %d", s.ID)
 		}
 		ids[s.ID] = true
@@ -106,7 +111,7 @@ func (l *Layout) Validate() error {
 			}
 		}
 	}
-	return nil
+	return l.validateTransfers()
 }
 func routeLength(p []Point) float64 {
 	d := 0.0
@@ -116,6 +121,13 @@ func routeLength(p []Point) float64 {
 	return d
 }
 func NewNetwork(l *Layout, c Config) *Runtime {
+	levels := map[string]int{}
+	for key, floor := range c.LineLayers {
+		if l.HighestLayer == 0 || floor <= l.HighestLayer {
+			levels[key] = floor
+		}
+	}
+	c.LineLayers = levels
 	root := &Runtime{config: c, layout: l}
 	gates := map[int]*crossingGate{}
 	for _, spec := range l.Lines {
@@ -152,6 +164,7 @@ func NewNetwork(l *Layout, c Config) *Runtime {
 		}
 		root.lines = append(root.lines, r)
 	}
+	root.initTransfers()
 	return root
 }
 func directionIndex(d int) int {

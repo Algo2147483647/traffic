@@ -59,13 +59,14 @@ async function createWindow() {
       document.querySelector('#settings-maximize').click();if(panel.getBoundingClientRect().width<innerWidth-20)throw Error('Settings maximize failed');
       document.querySelector('#settings-maximize').click();if(Math.abs(panel.getBoundingClientRect().width-resized.width)>1)throw Error('Settings restore failed');
 
+      const metroLayers=(await get('/api/snapshot')).metro.lines.map(l=>String(l.layer));
       for (const layer of [...document.querySelector('#layer-index').options].map(o=>o.value).concat('all')) {
         const select=document.querySelector('#layer-filter'),index=document.querySelector('#layer-index');
         select.value=layer==='all'?'all':'specified';select.dispatchEvent(new Event('change'));
         if(layer!=='all'){index.value=layer;index.dispatchEvent(new Event('change'));}
         drawnLabels.length=0;await wait(160);
         const metroVisible=drawnLabels.some(label=>label.startsWith('T')&&label.includes(' / ')&&!isNaN(Number(label.slice(1,label.indexOf(' / ')))));
-        if(metroVisible!==(layer==='all'||Number(layer)<0))throw Error('Metro layer visibility failed: '+layer);
+        if(metroVisible!==(layer==='all'||metroLayers.includes(layer)))throw Error('Metro layer visibility failed: '+layer);
         if(index.disabled!==(layer==='all'))throw Error('Level selector state failed');
       }
       if(document.querySelector('#settings-panel details'))throw Error('Settings still contains collapsed sections');
@@ -154,16 +155,17 @@ async function createWindow() {
       if(configured.cars!==6||configured.max_speed_kmh!==300||configured.headway_s!==60)throw Error('Metro UI controls failed');
       await control({action:'set_demand',demand:{trips_per_minute:12,taxi_share:.3,metro_share:.3}});
       let metroSnap;
-      for(let i=0;i<2000;i++){metroSnap=await control({action:'step',delta:4});if(metroSnap.metro.completed>=2&&metroSnap.metro.departures>=4)break;await wait(20);}
+      for(let i=0;i<2000;i++){metroSnap=await control({action:'step',delta:4});if(metroSnap.metro.completed>=2&&metroSnap.metro.departures>=4&&(preset!=='radial-grid-cloverleaf'||metroSnap.metro.transfers_completed>=2))break;await wait(20);}
       const metroResult=metroSnap.metro;
+      if(preset==='radial-grid-cloverleaf'&&(metroResult.interchanges.length!==6||metroResult.transfers_completed<2||metroResult.lines.some(l=>l.layer>-10)))throw Error('Map 3 transfers or underground levels missing');
       if(!metroSnap.demand.conserved||metroSnap.demand.metro_trips===0)throw Error('Three mode accounting failed');
       if(metroResult.completed<2||metroResult.departures<4||metroResult.generated!==metroResult.waiting+metroResult.onboard+metroResult.completed)throw Error('Metro did not deliver conserved passengers: '+JSON.stringify({time:metroSnap.time,generated:metroResult.generated,waiting:metroResult.waiting,onboard:metroResult.onboard,completed:metroResult.completed,departures:metroResult.departures}));
       if(metroResult.trains.some(t=>t.car_poses.length!==6||t.car_length_m!==22.8||t.car_width_m!==3||t.passengers>t.capacity||t.cars.length!==6||Math.abs(t.length_m-136.8)>1e-6||t.cars.reduce((a,b)=>a+b,0)!==t.passengers||t.cars.some((n,i)=>n>t.car_capacities[i])||t.speed_mps>300/3.6))throw Error('Metro car manifest or speed invalid');
       if(preset==='preset-1'&&(metroResult.lines.length!==3||metroResult.stations.length!==15||metroResult.trains.length!==6))throw Error('Radial metro missing');
-      const levelInput=document.querySelector('#metro-levels select');levelInput.value='-4';document.querySelector('#metro-apply').click();
-      for(let i=0;i<50&&(await get('/api/snapshot')).metro.lines[0].layer!==-4;i++)await wait(50);
-      if((await get('/api/snapshot')).metro.lines[0].layer!==-4)throw Error('Metro level control not connected');
-      if(!document.querySelector('#layer-index').querySelector('[value="-4"]'))throw Error('New underground level not selectable');
+      const changedLevel=preset==='radial-grid-cloverleaf'?-14:-4;const levelInput=document.querySelector('#metro-levels select');levelInput.value=String(changedLevel);document.querySelector('#metro-apply').click();
+      for(let i=0;i<50&&(await get('/api/snapshot')).metro.lines[0].layer!==changedLevel;i++)await wait(50);
+      if((await get('/api/snapshot')).metro.lines[0].layer!==changedLevel)throw Error('Metro level control not connected');
+      if(!document.querySelector('#layer-index').querySelector('[value="'+changedLevel+'"]'))throw Error('New underground level not selectable');
       if(errors.length)throw Error(errors.join('; '));
       // Rendering regression: real cars and tunnel widths must scale together.
       const carWidths=[],tunnelWidths=[],colors=['#72bde8','#c7a1ef','#7ed4b1'];
@@ -177,7 +179,7 @@ async function createWindow() {
       document.querySelector('#settings-panel').hidden=false;document.querySelector('#metro-settings').scrollIntoView({block:'start'});await wait(150);
       if (${JSON.stringify(process.env.TRAFFIC_SMOKE_FOCUS === 'metro')}) {
         document.querySelector('#settings-panel').hidden=true;
-        const selector=document.querySelector('#layer-filter'),index=document.querySelector('#layer-index');selector.value='specified';selector.dispatchEvent(new Event('change'));index.value='-4';index.dispatchEvent(new Event('change'));await wait(100);
+        const selector=document.querySelector('#layer-filter'),index=document.querySelector('#layer-index');selector.value='specified';selector.dispatchEvent(new Event('change'));index.value=String(changedLevel);index.dispatchEvent(new Event('change'));await wait(100);
         const m=(await get('/api/snapshot')).metro,line=m.lines[0],tr=m.trains.find(t=>t.line===line.id&&t.passengers>0)||m.trains[0];
         const xs=line.track.map(p=>p.x),ys=line.track.map(p=>p.y),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
         const canvas=document.querySelector('#city-canvas'),rect=canvas.getBoundingClientRect(),scale=Math.min((rect.width-100)/(maxX-minX),(rect.height-100)/(maxY-minY));
@@ -192,8 +194,13 @@ async function createWindow() {
         document.querySelector('#settings-panel').hidden=true;
         const selector=document.querySelector('#layer-filter'),index=document.querySelector('#layer-index');selector.value='specified';selector.dispatchEvent(new Event('change'));index.value='0';index.dispatchEvent(new Event('change'));document.querySelector('#fit-button').click();await wait(150);
       }
+      if (${JSON.stringify(process.env.TRAFFIC_SMOKE_FOCUS === 'overview')}) {
+        document.querySelector('#settings-panel').hidden=true;
+        const selector=document.querySelector('#layer-filter');selector.value='all';selector.dispatchEvent(new Event('change'));
+        document.querySelector('#fit-button').click();document.querySelector('#zoom-in-button').click();document.querySelector('#zoom-in-button').click();await wait(150);
+      }
       if(errors.length)throw Error(errors.join('; '));
-      return { metroResult:{completed:metroResult.completed,departures:metroResult.departures,generated:metroResult.generated},taxiResult, title: document.title, people: after.people.length, time: after.time, presets: document.querySelector('#map-preset').options.length };
+      return { metroResult:{transfers:metroResult.transfers_completed,exchanges:(metroResult.interchanges||[]).length,completed:metroResult.completed,departures:metroResult.departures,generated:metroResult.generated},taxiResult, title: document.title, people: after.people.length, time: after.time, presets: document.querySelector('#map-preset').options.length };
     })()`);
     const output = process.env.TRAFFIC_SMOKE_OUTPUT || path.join(app.getPath('temp'), 'traffic-desktop-smoke.png');
     fs.writeFileSync(output, (await window.webContents.capturePage()).toPNG());

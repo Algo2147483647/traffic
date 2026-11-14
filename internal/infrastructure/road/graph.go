@@ -67,7 +67,7 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 		if _, exists := graph.Intersections[intersection.ID]; exists {
 			return nil, fmt.Errorf("duplicate intersection %q", intersection.ID)
 		}
-		if intersection.Layer < 0 || intersection.Layer > 16 || math.IsNaN(intersection.Elevation) || math.IsInf(intersection.Elevation, 0) || intersection.Elevation < 0 || (intersection.Layer == 0 && intersection.Elevation != 0) || (intersection.Layer > 0 && intersection.Elevation <= 0) {
+		if intersection.Layer < -9 || intersection.Layer > 16 || math.IsNaN(intersection.Elevation) || math.IsInf(intersection.Elevation, 0) || (intersection.Layer == 0 && intersection.Elevation != 0) || (intersection.Layer > 0 && intersection.Elevation <= 0) || (intersection.Layer < 0 && intersection.Elevation >= 0) {
 			return nil, fmt.Errorf("intersection %s has invalid layer/elevation", intersection.ID)
 		}
 		angle := intersection.Rotation * math.Pi / 180
@@ -142,7 +142,7 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 		if input.Structure == "" {
 			input.Structure = "ground"
 		}
-		if input.Structure != "ground" && input.Structure != "bridge" && input.Structure != "ramp" {
+		if input.Structure != "ground" && input.Structure != "bridge" && input.Structure != "ramp" && input.Structure != "tunnel" {
 			return nil, fmt.Errorf("way %s has invalid structure", input.ID)
 		}
 		if from.Elevation != to.Elevation && input.Structure != "ramp" {
@@ -150,6 +150,9 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 		}
 		if input.Structure == "ground" && (from.Layer != 0 || to.Layer != 0) {
 			return nil, fmt.Errorf("ground way %s has elevated endpoints", input.ID)
+		}
+		if input.Structure == "tunnel" && (from.Layer >= 0 || from.Layer != to.Layer) {
+			return nil, fmt.Errorf("tunnel way %s needs matching underground endpoints", input.ID)
 		}
 		if input.Structure == "bridge" && (from.Layer < 1 || from.Layer != to.Layer) {
 			return nil, fmt.Errorf("bridge way %s needs elevated endpoints", input.ID)

@@ -27,6 +27,7 @@ type Point struct {
 	Y float64 `json:"y"`
 }
 type StationView struct {
+	Transfer string `json:"transfer,omitempty"`
 	Layer    int    `json:"layer"`
 	ID       int    `json:"id"`
 	Name     string `json:"name"`
@@ -34,6 +35,7 @@ type StationView struct {
 	Waiting  int    `json:"waiting"`
 }
 type Passenger struct {
+	NetworkID   int
 	JourneyID   int
 	Car         int
 	ID          int
@@ -88,20 +90,25 @@ type LineView struct {
 	Stations     []int   `json:"stations"`
 }
 type View struct {
-	CrossingOwner int           `json:"crossing_owner"`
-	Lines         []LineView    `json:"lines"`
-	Layer         int           `json:"layer"`
-	Config        Config        `json:"config"`
-	Time          float64       `json:"time"`
-	Stations      []StationView `json:"stations"`
-	Trains        []TrainView   `json:"trains"`
-	Blocks        []Block       `json:"blocks"`
-	Routes        []Route       `json:"routes"`
-	Generated     int           `json:"generated"`
-	Waiting       int           `json:"waiting"`
-	Onboard       int           `json:"onboard"`
-	Completed     int           `json:"completed"`
-	Departures    int           `json:"departures"`
+	HighestLayer       int              `json:"highest_layer"`
+	Transferring       int              `json:"transferring"`
+	TransfersCompleted int              `json:"transfers_completed"`
+	Interchanges       []TransferSite   `json:"interchanges,omitempty"`
+	Journeys           []NetworkJourney `json:"journeys,omitempty"`
+	CrossingOwner      int              `json:"crossing_owner"`
+	Lines              []LineView       `json:"lines"`
+	Layer              int              `json:"layer"`
+	Config             Config           `json:"config"`
+	Time               float64          `json:"time"`
+	Stations           []StationView    `json:"stations"`
+	Trains             []TrainView      `json:"trains"`
+	Blocks             []Block          `json:"blocks"`
+	Routes             []Route          `json:"routes"`
+	Generated          int              `json:"generated"`
+	Waiting            int              `json:"waiting"`
+	Onboard            int              `json:"onboard"`
+	Completed          int              `json:"completed"`
+	Departures         int              `json:"departures"`
 }
 type train struct {
 	control       Control
@@ -118,13 +125,18 @@ type train struct {
 }
 type crossingGate struct{ owner int }
 type Runtime struct {
-	layout       *Layout
-	spec         *LineSpec
-	reverseChain []float64
-	chain        []float64
-	lines        []*Runtime
-	gate         *crossingGate
-	lineID       int
+	transferPlans    map[[2]int][]JourneyStep
+	travelers        map[int]*NetworkJourney
+	transferArrivals []int
+	transferCount    int
+	transferPairs    [][2]int
+	layout           *Layout
+	spec             *LineSpec
+	reverseChain     []float64
+	chain            []float64
+	lines            []*Runtime
+	gate             *crossingGate
+	lineID           int
 
 	config                           Config
 	time                             float64
@@ -184,7 +196,7 @@ func (r *Runtime) Configure(c Config) error {
 		c.Cars = 6
 	}
 	for _, floor := range c.LineLayers {
-		if floor >= 0 || floor < -16 {
+		if floor >= 0 || floor < -16 || (r.layout != nil && r.layout.HighestLayer < 0 && floor > r.layout.HighestLayer) {
 			return fmt.Errorf("metro levels must be -1 to -16")
 		}
 	}
@@ -231,8 +243,13 @@ func (r *Runtime) Configure(c Config) error {
 		local.Demand = c.Demand / float64(len(r.lines))
 		_ = line.Configure(local)
 	}
-	if changed && len(r.lines) == 0 {
+	if changed && (len(r.lines) == 0 || r.transferPlans != nil) {
 		r.scheduleArrival()
+	}
+	if r.transferPlans != nil {
+		replanned := NewNetwork(r.layout, c)
+		r.transferPlans = replanned.transferPlans
+		r.transferPairs = replanned.transferPairs
 	}
 	return nil
 }
@@ -260,6 +277,9 @@ func (r *Runtime) AddPassenger(origin, destination int) bool {
 	return r.AddJourney(origin, destination, 0)
 }
 func (r *Runtime) AddJourney(origin, destination, journey int) bool {
+	if r.transferPlans != nil {
+		return r.addNetworkJourney(origin, destination, journey)
+	}
 	if len(r.lines) > 0 {
 		offset := 0
 		for _, line := range r.lines {
@@ -289,6 +309,7 @@ func (r *Runtime) Advance(dt float64) {
 		for _, line := range r.lines {
 			line.Advance(dt)
 		}
+		r.advanceTransfers(dt)
 		return
 	}
 	r.time += dt
@@ -334,7 +355,9 @@ func (r *Runtime) Advance(dt float64) {
 				}
 			}
 			if idx >= 0 {
-				if id := t.onboard[idx].JourneyID; id > 0 {
+				if network := t.onboard[idx].NetworkID; network > 0 {
+					r.transferArrivals = append(r.transferArrivals, network)
+				} else if id := t.onboard[idx].JourneyID; id > 0 {
 					r.finishedJourneys = append(r.finishedJourneys, id)
 				}
 				t.onboard = append(t.onboard[:idx], t.onboard[idx+1:]...)
@@ -625,6 +648,9 @@ func (r *Runtime) DrainCompletedJourneys() []int {
 
 // ServedPairs enumerates directed, same-line station pairs in stable order.
 func (r *Runtime) ServedPairs() [][2]int {
+	if r.transferPlans != nil {
+		return append([][2]int(nil), r.transferPairs...)
+	}
 	pairs := [][2]int{}
 	offset := 0
 	if len(r.lines) == 0 {
@@ -648,6 +674,11 @@ func (r *Runtime) ServedPairs() [][2]int {
 
 func (r *Runtime) ActiveJourneys() map[int]int {
 	out := map[int]int{}
+	for _, j := range r.travelers {
+		if !j.Riding && j.JourneyID > 0 {
+			out[j.JourneyID]++
+		}
+	}
 	for _, line := range r.lines {
 		for id, n := range line.ActiveJourneys() {
 			out[id] += n

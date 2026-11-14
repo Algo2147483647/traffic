@@ -64,3 +64,42 @@ func TestMap3GeometryAndReachability(t *testing.T) {
 		}
 	}
 }
+
+func TestMap3CornerEntriesAndUndergroundSeparation(t *testing.T) {
+	c, e := LoadConfig("../../../example/Map3/road.json")
+	if e != nil {
+		t.Fatal(e)
+	}
+	g, e := BuildGraph(c)
+	if e != nil {
+		t.Fatal(e)
+	}
+	corners, tunnels := 0, 0
+	for id, n := range g.Intersections {
+		if strings.HasPrefix(id, "RingCorner_") {
+			corners++
+			if len(g.Incoming[id]) != 4 || len(g.Outgoing[id]) != 4 {
+				t.Fatal("corner did not join two grid legs and ring")
+			}
+		}
+		if strings.HasPrefix(id, "T_") && n.TrafficControl.Mode != "flow" {
+			t.Fatal("tunnel portal has signals")
+		}
+	}
+	for _, w := range g.Ways {
+		if w.Structure == "tunnel" {
+			tunnels++
+			if w.StartLayer != -1 || w.EndLayer != -1 || w.StartElevation != -6.5 || w.EndElevation != -6.5 {
+				t.Fatal("wrong tunnel layer")
+			}
+		}
+	}
+	if corners != 4 || tunnels != 8 {
+		t.Fatal(corners, tunnels)
+	}
+	for i, l := range c.Metro.Lines {
+		if l.Layer != -10-i {
+			t.Fatal("metro floor")
+		}
+	}
+}

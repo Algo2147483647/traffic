@@ -18,7 +18,7 @@
     {
       "id": 0,
       "name": "Line 1",
-      "layer": -1,
+      "layer": -10,
       "stations": [
         {
           "x": -4096.0,
@@ -3307,7 +3307,7 @@
     {
       "id": 1,
       "name": "Line 2",
-      "layer": -2,
+      "layer": -11,
       "stations": [
         {
           "x": -2047.9999999999998,
@@ -6596,7 +6596,7 @@
     {
       "id": 2,
       "name": "Line 3",
-      "layer": -3,
+      "layer": -12,
       "stations": [
         {
           "x": 2047.9999999999989,
@@ -9885,7 +9885,7 @@
     {
       "id": 3,
       "name": "Orbital Line",
-      "layer": -4,
+      "layer": -13,
       "circular": true,
       "stations": [
         {
@@ -51137,6 +51137,87 @@
       ],
       "crossing_station": -1,
       "loop_speed_kmh": 300
+    }
+  ],
+  "highest_layer": -10,
+  "transfers": [
+    {
+      "id": "X1",
+      "name": "Exchange 1",
+      "a": [
+        0,
+        4
+      ],
+      "b": [
+        3,
+        0
+      ],
+      "seconds": 60
+    },
+    {
+      "id": "X2",
+      "name": "Exchange 2",
+      "a": [
+        1,
+        4
+      ],
+      "b": [
+        3,
+        1
+      ],
+      "seconds": 60
+    },
+    {
+      "id": "X3",
+      "name": "Exchange 3",
+      "a": [
+        2,
+        4
+      ],
+      "b": [
+        3,
+        2
+      ],
+      "seconds": 60
+    },
+    {
+      "id": "X4",
+      "name": "Exchange 4",
+      "a": [
+        0,
+        0
+      ],
+      "b": [
+        3,
+        3
+      ],
+      "seconds": 60
+    },
+    {
+      "id": "X5",
+      "name": "Exchange 5",
+      "a": [
+        1,
+        0
+      ],
+      "b": [
+        3,
+        4
+      ],
+      "seconds": 60
+    },
+    {
+      "id": "X6",
+      "name": "Exchange 6",
+      "a": [
+        2,
+        0
+      ],
+      "b": [
+        3,
+        5
+      ],
+      "seconds": 60
     }
   ]
 }

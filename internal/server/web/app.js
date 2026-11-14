@@ -129,7 +129,7 @@
     const levels = state.layerFilter === "all" ? roadLevels() : [Number(state.layerFilter)];
     for (const level of levels) {
       renderLevel = level;
-      for (const layer of ["ground", "ramp", "bridge"]) {
+      for (const layer of ["tunnel", "ground", "ramp", "bridge"]) {
         renderStructure = layer;
         drawWays(); drawIntersectionPads(); drawSelectedTrip(); drawSignals();
         drawLaneDirectionMarkings(); drawIntersections(); drawTaxiStops(); drawPeople();
@@ -155,7 +155,7 @@
     const detailsOpen=details.width>0 && !document.querySelector(".right-stack").classList.contains("collapsed");
     const left=80, top=26, right=detailsOpen?Math.min(t.width-68,details.left-14):t.width-68;
     const bottom=Math.min(t.height-50,stats.top-12);
-    ctx.save();ctx.font="12px Times New Roman";ctx.fillStyle="#bcbcbc";ctx.strokeStyle="#777777";ctx.lineWidth=1;
+    ctx.save();ctx.font="12px Times New Roman";const transferLabels=new Set();ctx.fillStyle="#bcbcbc";ctx.strokeStyle="#777777";ctx.lineWidth=1;
     ctx.shadowColor="#080808";ctx.shadowBlur=5;
     // Edge rulers only: no lines cross the road surface.
     ctx.beginPath();ctx.moveTo(left,top);ctx.lineTo(right,top);ctx.moveTo(left,top);ctx.lineTo(left,bottom);ctx.stroke();
@@ -192,7 +192,7 @@
     return (!renderStructure || (way.structure||"ground")===renderStructure) && !!wayInterval(way);
   }
   function nodeVisible(node) {
-    return levelVisible(node.layer||0) && (!renderStructure || renderStructure===((node.layer||0)>0?"bridge":"ground"));
+    return levelVisible(node.layer||0) && (!renderStructure || renderStructure===((node.layer||0)<0?"tunnel":(node.layer||0)>0?"bridge":"ground"));
   }
   function personLevel(person) {
     const way=state.city.ways.find(w=>w.id===person.way_id);
@@ -215,7 +215,7 @@
   function drawMetro() {
     const m=state.snapshot?.metro;if(!m)return;
     const scale=currentTransform().scale,colors=["#72bde8","#c7a1ef","#7ed4b1"];
-    ctx.save();ctx.font="12px Times New Roman";
+    ctx.save();ctx.font="12px Times New Roman";const transferLabels=new Set();
     for(const line of [...m.lines].sort((a,b)=>a.layer-b.layer)) {
       if(!line.track?.length||!levelVisible(line.layer))continue;
       const color=colors[line.id%colors.length];
@@ -226,7 +226,8 @@
       for(const id of line.stations) {
         const st=m.stations[id],p=screen(st.position);ctx.fillStyle=color;
         ctx.beginPath();ctx.arc(p.x,p.y,2.5*scale,0,Math.PI*2);ctx.fill();
-        if(scale>.08)ctx.fillText(st.name+" / "+st.waiting,p.x+8,p.y-10);
+        if(st.transfer){ctx.beginPath();ctx.arc(p.x,p.y,6*scale,0,Math.PI*2);ctx.strokeStyle=color;ctx.lineWidth=Math.max(.7,scale);ctx.stroke();}
+        if(scale>.08&&(!st.transfer||!transferLabels.has(st.transfer)))ctx.fillText(st.name+" / "+st.waiting,p.x+8,p.y-10);if(st.transfer)transferLabels.add(st.transfer);
       }
       for(const t of m.trains.filter(t=>t.line===line.id)) {
         const w=t.car_length_m*scale,h=t.car_width_m*scale,gap=.3*scale;
@@ -528,10 +529,10 @@
     $("metro-demand").disabled=!!snapshot.demand;$("metro-demand").title=snapshot.demand?"Arrivals are controlled by the shared demand mix":"Standalone metro arrivals";
     if(snapshot.algorithms){const a=snapshot.algorithms;$("road-algorithm-status").textContent=a.last_error?`Native fallback: ${a.last_error}`:`${a.pending?"Computing · ":""}${a.applied} applied · ${a.fallbacks} fallbacks`;}
     if(snapshot.metro){const m=snapshot.metro,key=JSON.stringify([m.config,m.lines.map(l=>[l.id,l.layer])]);if(state.metroKey!==key){state.metroKey=key;
-      $("metro-levels").replaceChildren(...m.lines.map(line=>{const label=document.createElement("label");label.className="select-control";label.textContent=line.name+" level";const input=document.createElement("select");input.dataset.line=String(line.id);for(let i=-1;i>=-16;i--){const option=document.createElement("option");option.value=String(i);option.textContent=String(i);input.append(option);}input.value=String(line.layer);label.append(input);return label;}));
-      const previous=state.layerFilter;const levels=[...new Set([...m.lines.map(l=>l.layer),...roadLevels()])].sort((a,b)=>a-b);$("layer-index").replaceChildren(...levels.map(l=>{const option=document.createElement("option");option.value=String(l);option.textContent=l<0?`${l} - Metro`:l===0?"0 - Ground":`+${l} - Elevated`;return option;}));if(previous!=="all"&&!levels.includes(Number(previous)))state.layerFilter=String(levels[0]);$("layer-index").value=state.layerFilter==="all"?"0":state.layerFilter;
+      $("metro-levels").replaceChildren(...m.lines.map(line=>{const label=document.createElement("label");label.className="select-control";label.textContent=line.name+" level";const input=document.createElement("select");input.dataset.line=String(line.id);for(let i=m.highest_layer||-1;i>=-16;i--){const option=document.createElement("option");option.value=String(i);option.textContent=String(i);input.append(option);}input.value=String(line.layer);label.append(input);return label;}));
+      const previous=state.layerFilter;const levels=[...new Set([...m.lines.map(l=>l.layer),...roadLevels()])].sort((a,b)=>a-b);$("layer-index").replaceChildren(...levels.map(l=>{const option=document.createElement("option");option.value=String(l);option.textContent=l<0?`${l} - Underground`:l===0?"0 - Ground":`+${l} - Elevated`;return option;}));if(previous!=="all"&&!levels.includes(Number(previous)))state.layerFilter=String(levels[0]);$("layer-index").value=state.layerFilter==="all"?"0":state.layerFilter;
 $("metro-enabled").checked=m.config.enabled;$("metro-headway").value=m.config.headway_s;$("metro-demand").value=m.config.passengers_per_minute;$("metro-capacity").value=m.config.capacity;$("metro-dwell").value=m.config.dwell_s;$("metro-cars").value=m.config.cars;$("metro-speed").value=m.config.max_speed_kmh;}
-    $("metro-summary").textContent=`${m.generated} generated · ${m.waiting} waiting · ${m.onboard} onboard · ${m.completed} completed · ${m.departures} departures · ${m.blocks.filter(b=>b.occupied_by).length} occupied blocks · ${m.routes.filter(r=>r.owner).length} locked routes`;
+    $("metro-summary").textContent=`${m.generated} generated · ${Math.max(0,m.waiting-(m.transferring||0))} platform waiting · ${m.onboard} onboard · ${m.completed} completed · ${m.transferring||0} transferring · ${m.transfers_completed||0} transfers · ${m.departures} departures · ${m.blocks.filter(b=>b.occupied_by).length} occupied blocks · ${m.routes.filter(r=>r.owner).length} locked routes`;
     $("metro-trains").replaceChildren(...m.trains.map(t=>{const p=document.createElement("p");p.textContent=`T${t.id} · ${t.state} · ${(t.speed_mps*3.6).toFixed(1)} km/h · ${t.passengers}/${t.capacity} · ${t.cars.length} cars [${t.cars.join(" / ")}]${t.cars.length!==m.config.cars?" (consist change at empty terminal)":""} · M${t.station+1} → M${t.next+1} · departure in ${Math.max(0,t.departure_s-m.time).toFixed(0)} s · delay ${t.delay_s.toFixed(0)} s`;return p;}));}
     updateComputeRate(snapshot);
     const minutes = Math.floor(snapshot.time / 60).toString().padStart(2, "0"), seconds = (snapshot.time % 60).toFixed(1).padStart(4, "0");
@@ -561,7 +562,7 @@ $("metro-enabled").checked=m.config.enabled;$("metro-headway").value=m.config.he
   function updateCity(city) {
     loadPresets();
     state.city = city;
-    const levels=[...new Set([-1,...(state.snapshot?.metro?.lines||[]).map(l=>l.layer),...roadLevels()])].sort((a,b)=>a-b);$("layer-index").replaceChildren(...levels.map(level=>{const option=document.createElement("option");option.value=String(level);option.textContent=level<0?`${level} - Metro`:level===0?"0 - Ground":`+${level} - Elevated`;return option;}));
+    const levels=[...new Set([-1,...(state.snapshot?.metro?.lines||[]).map(l=>l.layer),...roadLevels()])].sort((a,b)=>a-b);$("layer-index").replaceChildren(...levels.map(level=>{const option=document.createElement("option");option.value=String(level);option.textContent=level<0?`${level} - Underground`:level===0?"0 - Ground":`+${level} - Elevated`;return option;}));
     if(state.layerFilter!=="all"&&!levels.includes(Number(state.layerFilter)))state.layerFilter="0";
     $("layer-index").value=state.layerFilter==="all"?"0":state.layerFilter;
     state.laneDirections = buildLaneDirections(city);
@@ -686,7 +687,7 @@ $("metro-enabled").checked=m.config.enabled;$("metro-headway").value=m.config.he
       const scale=Math.min(copy.width/(maxX-minX+100),copy.height/(maxY-minY+100));
       state.transform={baseScale:scale,baseOx:copy.width/2-(minX+maxX)*scale/2,baseOy:copy.height/2-(minY+maxY)*scale/2,width:copy.width,height:copy.height};state.camera={zoom:1,panX:0,panY:0};
       ctx.clearRect(0,0,copy.width,copy.height);
-      for(const layer of ["ground","ramp","bridge"]){renderStructure=layer;drawWays();drawIntersectionPads();for(const w of ways){if(ids.has(w.id)&&wayVisible(w)){drawWayRange(w,0,wayLength(w),(w.lanes-1)/2,"#c8f26b",3);for(let d=80;d<wayLength(w);d+=180){const v=sampleWay(w,d,(w.lanes-1)/2),p=screen(v);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(Math.atan2(v.ty,v.tx));ctx.fillStyle="#e7ffb1";ctx.beginPath();ctx.moveTo(5,0);ctx.lineTo(-4,-3);ctx.lineTo(-4,3);ctx.closePath();ctx.fill();ctx.restore();}}}}
+      for(const layer of ["tunnel","ground","ramp","bridge"]){renderStructure=layer;drawWays();drawIntersectionPads();for(const w of ways){if(ids.has(w.id)&&wayVisible(w)){drawWayRange(w,0,wayLength(w),(w.lanes-1)/2,"#c8f26b",3);for(let d=80;d<wayLength(w);d+=180){const v=sampleWay(w,d,(w.lanes-1)/2),p=screen(v);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(Math.atan2(v.ty,v.tx));ctx.fillStyle="#e7ffb1";ctx.beginPath();ctx.moveTo(5,0);ctx.lineTo(-4,-3);ctx.lineTo(-4,3);ctx.closePath();ctx.fill();ctx.restore();}}}}
     } finally {ctx=saved.ctx;state.city=saved.city;state.snapshot=saved.snapshot;state.transform=saved.transform;state.camera=saved.camera;renderStructure=saved.renderStructure;state.layerFilter=saved.layerFilter;}
   }
 

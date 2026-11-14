@@ -6,6 +6,9 @@ import (
 
 func (r *Runtime) networkView() View {
 	v := View{Config: r.config, Time: r.time, Layer: -1}
+	if r.layout != nil {
+		v.HighestLayer = r.layout.HighestLayer
+	}
 	v.CrossingOwner = r.lines[0].gate.owner
 	for _, line := range r.lines {
 		x := line.Snapshot()
@@ -52,5 +55,6 @@ func (r *Runtime) networkView() View {
 		v.Completed += x.Completed
 		v.Departures += x.Departures
 	}
+	r.transferView(&v)
 	return v
 }

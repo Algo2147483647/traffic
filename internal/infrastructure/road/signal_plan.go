@@ -17,7 +17,8 @@ func planTrafficControl(intersection *Intersection, input TrafficControlConfig, 
 		return TrafficControl{}, fmt.Errorf("unknown control mode %s", input.Mode)
 	}
 	if input.Mode == "flow" {
-		if len(incoming) != 1 && len(outgoing) != 1 {
+		continuation := len(incoming) == 2 && len(outgoing) == 2 && incoming[0].From != incoming[1].From
+		if len(incoming) != 1 && len(outgoing) != 1 && !continuation {
 			return TrafficControl{}, fmt.Errorf("flow node %s must be a simple merge or split", intersection.ID)
 		}
 		phase := TrafficPhaseConfig{ID: "flow", Name: "Merge / diverge", DurationSeconds: 3600}
@@ -65,6 +66,26 @@ func planTrafficControl(intersection *Intersection, input TrafficControlConfig, 
 				if len(covered[w.ID]) != w.Lanes {
 					return TrafficControl{}, fmt.Errorf("flow node %s leaves incoming lanes disconnected", intersection.ID)
 				}
+			}
+		}
+		if continuation {
+			if len(phase.AllowedMovements) != 2 {
+				return TrafficControl{}, fmt.Errorf("two-way continuation %s needs two straight movements", intersection.ID)
+			}
+			ins, outs := map[string]*Way{}, map[string]*Way{}
+			for _, w := range incoming {
+				ins[w.ID] = w
+			}
+			for _, w := range outgoing {
+				outs[w.ID] = w
+			}
+			for _, m := range phase.AllowedMovements {
+				if classifyMovement(ins[m.FromWayID], outs[m.ToWayID], rules) != "through" {
+					return TrafficControl{}, fmt.Errorf("continuation contains a turn")
+				}
+			}
+			if err := validateCompatiblePhase(intersection.ID, phase, ins, outs, intersectionRadius); err != nil {
+				return TrafficControl{}, err
 			}
 		}
 		return TrafficControl{Mode: "flow", Phases: []TrafficPhaseConfig{phase}, CycleSeconds: 3600, PlanningBasis: "Unsignalized merge / diverge with receiving-lane storage checks", TimingMethod: "Continuous flow"}, nil

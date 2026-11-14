@@ -18,7 +18,7 @@
   "metro_station_spacing_m": 2048,
   "metro_axis_radius_m": 4096,
   "metro_ring_radius_m": 4096,
-  "metro_ring_layer": -4,
+  "metro_ring_layer": -13,
   "sample_spacing_m": 5,
   "interchange_profile": "../Map2/interchange-design.json",
   "bounds": {
@@ -26,5 +26,12 @@
     "min_y": -5200,
     "max_x": 5200,
     "max_y": 5200
-  }
+  },
+  "metro_first_layer": -10,
+  "transfer_walk_seconds": 60,
+  "central_grid_half_width_m": 500,
+  "tunnel_depth_m": 6.5,
+  "tunnel_half_length_m": 50,
+  "tunnel_ramp_outer_m": 250,
+  "corner_ring_access": true
 }
