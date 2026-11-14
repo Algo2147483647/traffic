@@ -25,6 +25,48 @@ func planTrafficControl(intersection *Intersection, input TrafficControlConfig, 
 			phase.AllowedIncoming = append(phase.AllowedIncoming, from.ID)
 			phase.AllowedMovements = append(phase.AllowedMovements, makeApproachMovements(from, outgoing, rules, drivingSide)...)
 		}
+		if len(input.Connections) > 0 {
+			byIn, byOut := map[string]*Way{}, map[string]*Way{}
+			for _, w := range incoming {
+				byIn[w.ID] = w
+			}
+			for _, w := range outgoing {
+				byOut[w.ID] = w
+			}
+			covered := map[string]map[int]bool{}
+			phase.AllowedMovements = nil
+			for _, m := range input.Connections {
+				a, b := byIn[m.FromWayID], byOut[m.ToWayID]
+				if a == nil || b == nil {
+					return TrafficControl{}, fmt.Errorf("flow node %s references an unrelated road", intersection.ID)
+				}
+				if err := validateLaneIndices(m.FromLanes, a.Lanes); err != nil {
+					return TrafficControl{}, err
+				}
+				if err := validateLaneIndices(m.ToLanes, b.Lanes); err != nil {
+					return TrafficControl{}, err
+				}
+				if err := validateLaneConnections(m); err != nil {
+					return TrafficControl{}, err
+				}
+				if len(m.LaneConnections) == 0 {
+					return TrafficControl{}, fmt.Errorf("empty flow lane connections")
+				}
+				m.Turn = classifyMovement(a, b, rules)
+				if covered[a.ID] == nil {
+					covered[a.ID] = map[int]bool{}
+				}
+				for _, c := range m.LaneConnections {
+					covered[a.ID][c.FromLane] = true
+				}
+				phase.AllowedMovements = append(phase.AllowedMovements, m)
+			}
+			for _, w := range incoming {
+				if len(covered[w.ID]) != w.Lanes {
+					return TrafficControl{}, fmt.Errorf("flow node %s leaves incoming lanes disconnected", intersection.ID)
+				}
+			}
+		}
 		return TrafficControl{Mode: "flow", Phases: []TrafficPhaseConfig{phase}, CycleSeconds: 3600, PlanningBasis: "Unsignalized merge / diverge with receiving-lane storage checks", TimingMethod: "Continuous flow"}, nil
 	}
 	generated := len(input.Phases) == 0

@@ -88,28 +88,39 @@ The top-bar map selector exposes two live presets:
 
 - **Preset 1 — Meridian Hierarchy** keeps the JSON map supplied through
   `-config` (the existing `configs/meridian-city.json` by default).
-- **Preset 2 — Four-Cell Interchange Network** is a separate 6,000 × 6,000
-  world-unit four-cell grid. The central diamond and four three-arm folded
-  diamonds each have two ground ramp terminals, two independent bridge
-  carriageways, and four interchange ramps. The outer folded diamonds have
-  one surface branch; the central diamond has north and south branches.
-  There are 60 nodes and 96 directed ways. Bridge crossings do not share nodes
-  with surface roads. Merge/diverge nodes use continuous flow with existing
-  downstream lane reservation and storage checks; ramp terminals retain signals.
+- **Preset 2 — Four-Cell Interchange Network** has a central full cloverleaf
+  with four loop ramps, four direct right-turn ramps and four two-lane
+  collector-distributor carriageways. The four peripheral nodes retain their
+  three-arm folded diamonds. There are 88 nodes and 128 directed ways.
+  Mainline through traffic bypasses the C/D weaving sections without signals.
 
-In Settings, **LAYER** selects **All layers / Ground / Bridges / Ramps**.
-Bridge decks and vehicles render above surface roads; ramps connect the levels.
-Click a terminal for its phase diagrams. Layer selection changes visibility,
-not the running simulation. Trip endpoints attach only to ground roads.
+Settings → **LAYER** selects **All layers / Ground / Bridges / Ramps**.
+Click the central interchange or one of its nodes for the interchange overview;
+**Movement** selects any of the 12 directional straight/left/right routes.
+Peripheral signal terminals retain phase diagrams. The original Meridian preset
+is unchanged. Layer selection changes display only, not simulation state.
 
-`structure` on each way is `ground`, `bridge`, or `ramp`; nodes carry `layer`,
-`elevation`, and an `interchange` group. Elevation interpolates along ramps and
-is included in person snapshots. Heights currently control topology metadata
-and drawing: grades do not yet change engine power, acceleration, or speed.
-The merge policy reserves receiving lanes; it does not model highway priority
-or driver gap acceptance. Geometry uses simulation world units, not a certified
-civil-engineering design. Regenerate this preset using
-`python scripts/generate_interchange_map.py`.
+See [Interchange system specification](docs/interchange-system.md) for the
+standards register, common-type catalogue, implemented architecture, parameters,
+validation and limitations. [Implementation summary](docs/interchange-summary.md)
+records the delivered scope and checks.
+
+Authoring and checks:
+
+```bash
+python scripts/generate_interchange_map.py
+python scripts/test_interchange_geometry.py
+go test ./cmd/... ./internal/...
+npm --prefix desktop test
+```
+
+The compiler reads `configs/interchange-design.json`. Generation is deterministic.
+Only the diamond/folded-diamond and cloverleaf templates are implemented; other
+common types are documented design references. Road paths sampled by the compiler
+are shared by rendering and simulation. Central flow nodes use explicit lane
+connections. Trip endpoints cannot attach to limited-access mainline/C/D roads.
+Ramp elevations use smooth endpoint transitions; slope-dependent dynamics and
+engineering clearance/superelevation checks are not part of the simulation.
 
 Additional presets are ordinary city JSON files in `configs/presets/`. The
 server discovers all `*.json` files in filename order at startup, using each

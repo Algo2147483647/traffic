@@ -41,3 +41,5 @@
 .right-stack .inspector-overlay .person-facts div{font-size:12px;line-height:1.45}
 .right-stack .inspector-overlay .person-facts dd{max-width:240px;overflow-wrap:anywhere}
 .right-stack .inspector-overlay .matrix span{font-size:11px;line-height:1.4;padding:6px}
+
+#interchange-inspector{font-size:13px;line-height:1.5}#interchange-inspector h2{font-size:16px}#interchange-inspector select{max-width:100%;font-size:13px;padding:6px;background:#151515;color:#ddd;border:1px solid #ffffff20}#interchange-canvas{display:block;width:100%;height:auto;margin-top:14px}#interchange-summary,#interchange-route-detail{color:#aaa}#interchange-inspector .select-control{display:flex;flex-wrap:wrap;gap:8px}

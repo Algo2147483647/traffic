@@ -47,14 +47,12 @@ async function createWindow() {
       if (after.time <= before.time) throw Error('Simulation did not advance');
       if (preset && ${JSON.stringify(process.env.TRAFFIC_SMOKE_DETAIL === '1')}) {
         const canvas=document.querySelector('#city-canvas'), rect=canvas.getBoundingClientRect();
-        canvas.dispatchEvent(new WheelEvent('wheel',{clientX:rect.width/2,clientY:rect.height/2,deltaY:-1300,bubbles:true,cancelable:true}));
-        await wait(300);
-        const city=await get('/api/city'), node=city.intersections.find(n=>n.id==='C_North_terminal');
-        const scale=Math.min((rect.width-68)/(city.bounds.max_x-city.bounds.min_x),(rect.height-68)/(city.bounds.max_y-city.bounds.min_y))*Math.exp(1.95);
-        canvas.dispatchEvent(new MouseEvent('click',{clientX:rect.width/2+(node.position.x-3000)*scale,clientY:rect.height/2+(node.position.y-3000)*scale,bubbles:true}));
-        await wait(200);
-        if(document.querySelector('#signal-inspector').hidden) throw Error('Junction details did not open');
-        if(document.querySelectorAll('#signal-movements canvas').length!==node.traffic_control.phases.length) throw Error('Phase diagrams missing');
+        canvas.dispatchEvent(new MouseEvent('click',{clientX:rect.width/2,clientY:rect.height/2,bubbles:true}));await wait(200);
+        if(document.querySelector('#interchange-inspector').hidden) throw Error('Interchange details did not open');
+        const movements=document.querySelector('#interchange-movement');
+        if(movements.options.length!==12) throw Error('Missing interchange movements');
+        for(let i=0;i<12;i++){movements.value=String(i);movements.dispatchEvent(new Event('change'));}
+        movements.value='1';movements.dispatchEvent(new Event('change'));await wait(100);
       }
       if(errors.length) throw Error(errors.join('; '));
       if (typeof require !== 'undefined') throw Error('Renderer has Node access');

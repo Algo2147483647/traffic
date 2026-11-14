@@ -59,6 +59,13 @@
           <dl class="person-facts"><div><dt>Way / lane</dt><dd id="person-way">—</dd></div><div><dt>Reference</dt><dd id="person-reference">—</dd></div><div><dt>World</dt><dd id="person-position">—</dd></div><div><dt>Origin</dt><dd id="person-origin">—</dd></div><div><dt>Destination</dt><dd id="person-destination">—</dd></div><div><dt>Route</dt><dd id="person-route">—</dd></div></dl>
           <p class="matrix-label">LOCAL TRANSFORM</p><div id="person-matrix" class="matrix"></div>
         </div>
+        <div id="interchange-inspector" hidden>
+          <div class="panel-heading"><h2 id="interchange-name">Interchange</h2></div>
+          <p id="interchange-summary"></p>
+          <label class="select-control">Movement<select id="interchange-movement" aria-label="Interchange movement"></select></label>
+          <canvas id="interchange-canvas" width="760" height="760" aria-label="Interchange route overview"></canvas>
+          <p id="interchange-route-detail"></p>
+        </div>
         <div id="signal-inspector" hidden>
           <div class="panel-heading"><div><h2 id="signal-name">Intersection A</h2></div><span id="signal-countdown">0.0s</span></div>
           <div class="controller-card"><div><span>Controller</span><strong id="signal-controller">—</strong></div><div><span>Decision</span><strong id="signal-decision">—</strong></div><div><span>Green target</span><strong id="signal-green-target">—</strong></div><div><span>Pressure</span><strong id="signal-pressure">—</strong></div></div>

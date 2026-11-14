@@ -25,6 +25,7 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 	applySimulationDefaults(&cfg.Simulation)
 
 	graph := &Graph{
+		Interchanges:  cfg.Interchanges,
 		Name:          cfg.Name,
 		Description:   cfg.Description,
 		DrivingSide:   cfg.DrivingSide,
@@ -136,7 +137,8 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 		if input.Structure == "bridge" && (from.Layer != 1 || to.Layer != 1) {
 			return nil, fmt.Errorf("bridge way %s needs elevated endpoints", input.ID)
 		}
-		way := &Way{Structure: input.Structure, StartElevation: from.Elevation, EndElevation: to.Elevation, ID: input.ID, Name: input.Name, From: input.From, To: input.To, Lanes: input.Lanes,
+		tripAccess := input.TripAccess == nil || *input.TripAccess
+		way := &Way{TripAccess: tripAccess, Role: input.Role, Geometry: input.Geometry, Structure: input.Structure, StartElevation: from.Elevation, EndElevation: to.Elevation, ID: input.ID, Name: input.Name, From: input.From, To: input.To, Lanes: input.Lanes,
 			LaneWidth: input.LaneWidth, CarriagewayOffset: carriagewayOffset,
 			SpeedLimit: input.SpeedLimit, RoadClass: input.RoadClass, Demand: input.Demand,
 			Weight: input.Lanes, Points: points}
@@ -161,7 +163,7 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 	}
 	hasGround := false
 	for _, way := range graph.Ways {
-		if way.Structure == "ground" {
+		if way.Structure == "ground" && way.TripAccess {
 			hasGround = true
 			break
 		}
@@ -192,6 +194,25 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 			return nil, err
 		}
 		intersection.TrafficControl = control
+	}
+	for _, interchange := range graph.Interchanges {
+		for _, route := range interchange.Routes {
+			if len(route.WayIDs) < 1 {
+				return nil, fmt.Errorf("interchange %s has empty route", interchange.ID)
+			}
+			for i, id := range route.WayIDs {
+				way := graph.Ways[id]
+				if way == nil {
+					return nil, fmt.Errorf("interchange route references missing road %s", id)
+				}
+				if i > 0 {
+					before := graph.Ways[route.WayIDs[i-1]]
+					if before.To != way.From {
+						return nil, fmt.Errorf("disconnected interchange route %s", id)
+					}
+				}
+			}
+		}
 	}
 	sort.Slice(graph.Edges, func(i, j int) bool { return graph.Edges[i].WayID < graph.Edges[j].WayID })
 	return graph, nil

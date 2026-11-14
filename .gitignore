@@ -52,3 +52,6 @@ yarn-error.log*
 /desktop/dist-junction/
 /desktop/dist-junction-focus/
 /desktop/dist-phases/
+
+# Geometry compiler cache
+/scripts/**/__pycache__/

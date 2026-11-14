@@ -134,6 +134,7 @@ type SignalState struct {
 }
 
 type CityView struct {
+	Interchanges  []model.Interchange       `json:"interchanges,omitempty"`
 	Name          string                    `json:"name"`
 	Description   string                    `json:"description"`
 	DrivingSide   string                    `json:"driving_side"`
@@ -236,7 +237,7 @@ func (s *Simulation) City() CityView {
 }
 
 func (s *Simulation) cityLocked() CityView {
-	return CityView{
+	return CityView{Interchanges: s.graph.Interchanges,
 		Name: s.graph.Name, Description: s.graph.Description, DrivingSide: s.graph.DrivingSide, MovementRules: s.graph.MovementRules, Bounds: s.graph.Bounds,
 		Simulation: s.graph.Simulation, Intersections: s.graph.SortedIntersections(),
 		Ways: s.graph.SortedWays(), Edges: append([]model.Edge(nil), s.graph.Edges...),
@@ -810,6 +811,7 @@ func (s *Simulation) Snapshot() Snapshot {
 			if way := s.graph.Ways[state.wayID]; way != nil {
 				person.Structure = way.Structure
 				fraction := math.Max(0, math.Min(1, state.along/way.Length))
+				fraction = fraction * fraction * (3 - 2*fraction)
 				person.Elevation = way.StartElevation + (way.EndElevation-way.StartElevation)*fraction
 				if state.state == "turning" {
 					person.Elevation = way.EndElevation

@@ -99,12 +99,12 @@
 
   function drawWayRange(way, from, to, lane, color, width, extraOffset = 0, lineCap = "round") {
     ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = lineCap; ctx.lineJoin = "round"; ctx.beginPath();
-    const distance = Math.abs(to - from), steps = Math.max(4, Math.min(36, Math.ceil(distance / 160)));
+    const distance = Math.abs(to - from), steps = way.geometry === "sampled" ? Math.max(4,Math.ceil(distance/6)) : Math.max(4, Math.min(36, Math.ceil(distance / 160)));
     const points = [];
     for (let index = 0; index <= steps; index++) {
       points.push(screen(sampleWay(way, from + (to - from) * index / steps, lane, extraOffset)));
     }
-    traceBezier(points);
+    if (way.geometry === "sampled") {points.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));} else traceBezier(points);
     ctx.stroke();
   }
 
@@ -123,7 +123,7 @@
     const groups = new Map();
     state.city.intersections.forEach(n => { if(n.interchange && !groups.has(n.interchange)) groups.set(n.interchange, n); });
     ctx.font="12px Times New Roman"; ctx.fillStyle="#dddddd";
-    groups.forEach((n,id) => { const members=state.city.intersections.filter(i=>i.interchange===id), p=screen({x:members.reduce((a,n)=>a+n.position.x,0)/members.length,y:members.reduce((a,n)=>a+n.position.y,0)/members.length});ctx.fillText(id === "C" ? "Central diamond" : `${id} interchange`,p.x+12,p.y-28); });
+    groups.forEach((n,id) => { const members=state.city.intersections.filter(i=>i.interchange===id), p=screen({x:members.reduce((a,n)=>a+n.position.x,0)/members.length,y:members.reduce((a,n)=>a+n.position.y,0)/members.length});ctx.fillText(id === "C" ? "Central cloverleaf" : `${id} interchange`,p.x+12,p.y-28); });
 
   }
 
@@ -176,6 +176,13 @@
     const scale = currentTransform().scale, radius = state.city.simulation.intersection_radius || 22;
     state.city.intersections.forEach((intersection) => {
       if (!nodeVisible(intersection)) return;
+      if(intersection.traffic_control.mode === "flow") {
+        const ways=Object.fromEntries(state.city.ways.map(w=>[w.id,w]));
+        for(const m of intersection.traffic_control.phases[0].allowed_movements||[]){const a=ways[m.from_way_id],b=ways[m.to_way_id];if(!a||!b)continue;for(const c of m.lane_connections||[]){
+          const start=sampleWay(a,Math.max(0,wayLength(a)-radius),c.from_lane),end=sampleWay(b,Math.min(radius,wayLength(b)),c.to_lane),p=screen(start),q=screen(end),h=Math.min(radius*.9,Math.hypot(start.x-end.x,start.y-end.y)*.45)*scale;
+          ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.bezierCurveTo(p.x+start.tx*h,p.y+start.ty*h,q.x-end.tx*h,q.y-end.ty*h,q.x,q.y);ctx.strokeStyle="#121212";ctx.lineWidth=Math.min(a.lane_width,b.lane_width)*scale+.5;ctx.lineCap="butt";ctx.stroke();
+        }}return;
+      }
       const incoming=state.city.ways.filter((way)=>way.to===intersection.id),outgoing=state.city.ways.filter((way)=>way.from===intersection.id),corners=[];
       [...incoming.map((way)=>({way,along:Math.max(0,wayLength(way)-radius)})),...outgoing.map((way)=>({way,along:Math.min(radius,wayLength(way))}))].forEach(({way,along})=>{const sample=sampleWay(way,along,(way.lanes-1)/2),half=way.lanes*way.lane_width/2+2;corners.push({x:sample.x-sample.ty*half,y:sample.y+sample.tx*half},{x:sample.x+sample.ty*half,y:sample.y-sample.tx*half});});
       // Use the mouth edges as anchors, then blend the curb between approaches.
@@ -431,10 +438,11 @@
   }
 
   function refreshInspector() {
-    $("empty-inspector").hidden = Boolean(state.selected); $("person-inspector").hidden = state.selected?.type !== "person"; $("signal-inspector").hidden = state.selected?.type !== "intersection";
+    $("empty-inspector").hidden = Boolean(state.selected); $("person-inspector").hidden = state.selected?.type !== "person"; $("signal-inspector").hidden = state.selected?.type !== "intersection"; $("interchange-inspector").hidden = state.selected?.type !== "interchange";
     if (state.selected?.type === "person") {
       const person = state.snapshot?.people.find((item) => item.id === state.selected.id); if (person) updatePersonInspector(person);
     } else if (state.selected?.type === "intersection") updateSignalInspector(state.selected.id);
+    else if (state.selected?.type === "interchange") updateInterchangeInspector(state.selected.id);
   }
 
   function updatePersonInspector(person) {
@@ -513,6 +521,31 @@
     }
   }
 
+  function updateInterchangeInspector(id) {
+    const group=(state.city.interchanges||[]).find(g=>g.id===id);if(!group)return;
+    const select=$("interchange-movement"), copy=$("interchange-canvas");
+    const key=JSON.stringify(group);
+    if(select.dataset.group!==key){
+      select.dataset.group=key;select.replaceChildren(...group.routes.map((route,i)=>{const o=document.createElement("option");o.value=i;o.textContent=`${route.origin} → ${route.destination} · ${route.turn}`;return o;}));copy.dataset.rendered="";
+    }
+    const signature=key+select.value;if(copy.dataset.rendered===signature)return;copy.dataset.rendered=signature;
+    const route=group.routes[Number(select.value)||0], ids=new Set(route.way_ids);
+    const nodes=state.city.intersections.filter(n=>n.interchange===id), nodeIDs=new Set(nodes.map(n=>n.id));
+    const ways=state.city.ways.filter(w=>nodeIDs.has(w.from)&&nodeIDs.has(w.to));
+    $("interchange-name").textContent=group.name;
+    $("interchange-summary").textContent=`4 loops · 4 right-turn ramps · 4 C/D carriageways`;
+    $("interchange-route-detail").textContent=`${route.turn === "left" ? "Loop ramp via collector-distributor roads" : route.turn === "right" ? "Direct ramp via collector-distributor roads" : "Continuous mainline"} · ${route.way_ids.length} road segments`;
+    const saved={ctx,city:state.city,snapshot:state.snapshot,transform:state.transform,camera:state.camera,renderStructure,layerFilter:state.layerFilter};
+    try {
+      ctx=copy.getContext("2d");state.city={...state.city,ways,intersections:nodes};state.snapshot=null;state.layerFilter="all";
+      const points=ways.flatMap(w=>w.points), minX=Math.min(...points.map(p=>p.x)), maxX=Math.max(...points.map(p=>p.x)), minY=Math.min(...points.map(p=>p.y)),maxY=Math.max(...points.map(p=>p.y));
+      const scale=Math.min(copy.width/(maxX-minX+100),copy.height/(maxY-minY+100));
+      state.transform={baseScale:scale,baseOx:copy.width/2-(minX+maxX)*scale/2,baseOy:copy.height/2-(minY+maxY)*scale/2,width:copy.width,height:copy.height};state.camera={zoom:1,panX:0,panY:0};
+      ctx.clearRect(0,0,copy.width,copy.height);
+      for(const layer of ["ground","ramp","bridge"]){renderStructure=layer;drawWays();drawIntersectionPads();for(const w of ways){if(ids.has(w.id)&&wayVisible(w)){drawWayRange(w,0,wayLength(w),(w.lanes-1)/2,"#c8f26b",3);for(let d=80;d<wayLength(w);d+=180){const v=sampleWay(w,d,(w.lanes-1)/2),p=screen(v);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(Math.atan2(v.ty,v.tx));ctx.fillStyle="#e7ffb1";ctx.beginPath();ctx.moveTo(5,0);ctx.lineTo(-4,-3);ctx.lineTo(-4,3);ctx.closePath();ctx.fill();ctx.restore();}}}}
+    } finally {ctx=saved.ctx;state.city=saved.city;state.snapshot=saved.snapshot;state.transform=saved.transform;state.camera=saved.camera;renderStructure=saved.renderStructure;state.layerFilter=saved.layerFilter;}
+  }
+
   async function control(action, extras = {}) {
     try { const response = await fetch("/api/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...extras }) }); if (!response.ok) throw new Error(await response.text()); const snapshot = await response.json(); updateSnapshot(snapshot); return snapshot; }
     catch (error) { setConnection("error", "Control request failed"); console.error(error); return null; }
@@ -572,7 +605,9 @@
     if (!state.snapshot || !state.transform) return; const click = canvasPoint(event);
     let intersectionMatch = null, intersectionDistance = 18;
     state.city.intersections.filter(nodeVisible).sort((a,b)=>(a.layer||0)-(b.layer||0)).forEach((item) => { const p = screen(item.position), d = Math.hypot(p.x - click.x, p.y - click.y); if (d < intersectionDistance) { intersectionMatch = item; intersectionDistance = d; } });
-    if (intersectionMatch) state.selected = { type: "intersection", id: intersectionMatch.id };
+    const group=(state.city.interchanges||[]).find(g => (intersectionMatch?.interchange===g.id) || Math.hypot(screen(g.center).x-click.x,screen(g.center).y-click.y)<45);
+    if (group) state.selected={type:"interchange",id:group.id};
+    else if (intersectionMatch) state.selected = { type: "intersection", id: intersectionMatch.id };
     else { let personMatch = null, distance = 13; state.snapshot.people.filter(p=>state.layerFilter === "all" || (p.structure||"ground") === state.layerFilter).forEach((person) => { const p = screen(person.position), d = Math.hypot(p.x - click.x, p.y - click.y); if (d < distance) { personMatch = person; distance = d; } }); if (personMatch) state.selected = { type: "person", id: personMatch.id }; }
     refreshInspector(); draw();
   });
@@ -594,6 +629,7 @@
   settingsToggle.addEventListener("click", () => toggleSettings(settingsPanel.hidden));
   $("settings-close").addEventListener("click", () => toggleSettings(false));
   document.addEventListener("keydown", event => { if (event.key === "Escape" && !settingsPanel.hidden) toggleSettings(false); });
+  $("interchange-movement").addEventListener("change",()=>{if(state.selected?.type==="interchange")updateInterchangeInspector(state.selected.id);});
   $("layer-filter").addEventListener("change", event => {
     state.layerFilter=event.target.value; state.selected=null; refreshInspector(); draw();
   });

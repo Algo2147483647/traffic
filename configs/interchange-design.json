@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "units": "simulation_world_units",
+  "cloverleaf": {
+    "mainline_offset": 24,
+    "cd_offset": 70,
+    "lane_width": 8,
+    "loop_radius": 140,
+    "right_radius": 1100,
+    "split_station": 1500,
+    "cd_station": 1350,
+    "portal_station": 1800,
+    "deck_height": 24,
+    "sample_spacing": 6,
+    "mainline_lanes": 3,
+    "cd_lanes": 2,
+    "mainline_speed": 100,
+    "cd_speed": 65,
+    "loop_speed": 30,
+    "right_speed": 50
+  },
+  "catalogue": [
+    {
+      "type": "diamond",
+      "arms": 4,
+      "implemented": true
+    },
+    {
+      "type": "folded_diamond",
+      "arms": 3,
+      "implemented": true
+    },
+    {
+      "type": "cloverleaf",
+      "arms": 4,
+      "implemented": true
+    },
+    {
+      "type": "trumpet",
+      "arms": 3,
+      "implemented": true
+    },
+    {
+      "type": "partial_cloverleaf",
+      "arms": 4,
+      "implemented": false
+    },
+    {
+      "type": "directional_t",
+      "arms": 3,
+      "implemented": false
+    },
+    {
+      "type": "stack",
+      "arms": 4,
+      "implemented": false
+    },
+    {
+      "type": "diverging_diamond",
+      "arms": 4,
+      "implemented": false
+    }
+  ],
+  "trumpet": {
+    "loop_radius": 100,
+    "carriageway_offset": 24,
+    "sample_spacing": 4,
+    "mainline_station": 650,
+    "mainline_portal": 900,
+    "branch_station": 360,
+    "branch_portal": 520
+  }
+}

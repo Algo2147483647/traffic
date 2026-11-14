@@ -110,9 +110,10 @@ type TrafficMovementConfig struct {
 }
 
 type TrafficControlConfig struct {
-	Mode          string               `json:"mode,omitempty"`
-	OffsetSeconds float64              `json:"offset_seconds"`
-	Phases        []TrafficPhaseConfig `json:"phases"`
+	Connections   []TrafficMovementConfig `json:"connections,omitempty"`
+	Mode          string                  `json:"mode,omitempty"`
+	OffsetSeconds float64                 `json:"offset_seconds"`
+	Phases        []TrafficPhaseConfig    `json:"phases"`
 }
 
 type IntersectionConfig struct {
@@ -127,6 +128,9 @@ type IntersectionConfig struct {
 }
 
 type WayConfig struct {
+	TripAccess *bool   `json:"trip_access,omitempty"`
+	Role       string  `json:"role,omitempty"`
+	Geometry   string  `json:"geometry,omitempty"`
 	Structure  string  `json:"structure,omitempty"`
 	ID         string  `json:"id"`
 	Name       string  `json:"name"`
@@ -153,7 +157,22 @@ type MovementRulesConfig struct {
 }
 
 // CityConfig is the JSON input contract for the simulator.
+type InterchangeRoute struct {
+	Origin      string   `json:"origin"`
+	Destination string   `json:"destination"`
+	Turn        string   `json:"turn"`
+	WayIDs      []string `json:"way_ids"`
+}
+type Interchange struct {
+	ID     string             `json:"id"`
+	Name   string             `json:"name"`
+	Type   string             `json:"type"`
+	Center Vec2               `json:"center"`
+	Routes []InterchangeRoute `json:"routes"`
+}
+
 type CityConfig struct {
+	Interchanges  []Interchange        `json:"interchanges,omitempty"`
 	Name          string               `json:"name"`
 	Description   string               `json:"description"`
 	DrivingSide   string               `json:"driving_side"`
@@ -234,6 +253,9 @@ type TrafficControl struct {
 }
 
 type Way struct {
+	TripAccess     bool    `json:"trip_access"`
+	Role           string  `json:"role,omitempty"`
+	Geometry       string  `json:"geometry,omitempty"`
 	Structure      string  `json:"structure"`
 	StartElevation float64 `json:"start_elevation"`
 	EndElevation   float64 `json:"end_elevation"`
@@ -264,6 +286,7 @@ type Edge struct {
 }
 
 type Graph struct {
+	Interchanges  []Interchange            `json:"interchanges,omitempty"`
 	Name          string                   `json:"name"`
 	Description   string                   `json:"description"`
 	DrivingSide   string                   `json:"driving_side"`
