@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func TestMap3GeometryAndReachability(t *testing.T) {
-	c, e := LoadConfig("../../../example/Map3/road.json")
+func TestRadialMap1GeometryAndReachability(t *testing.T) {
+	c, e := LoadConfig("../../../example/Map1/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -65,8 +65,8 @@ func TestMap3GeometryAndReachability(t *testing.T) {
 	}
 }
 
-func TestMap3CornerEntriesAndUndergroundSeparation(t *testing.T) {
-	c, e := LoadConfig("../../../example/Map3/road.json")
+func TestRadialMap1CornerEntriesAndUndergroundSeparation(t *testing.T) {
+	c, e := LoadConfig("../../../example/Map1/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}

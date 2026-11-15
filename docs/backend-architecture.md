@@ -1,6 +1,6 @@
 # Backend architecture
 
-Status: implemented package-boundary refactor, 2026-11-15. This document supersedes earlier architecture inventories. Communications remains a design, with no placeholder package or empty interface added.
+Status: implemented package-boundary refactor, 2026-11-15. This document supersedes earlier architecture inventories. Communications stage 1 is now implemented as a simplified observer; see `communications-baseline.md` for scope and limitations.
 
 ## Ownership and dependencies
 
@@ -129,3 +129,7 @@ The final release runs Go tests/vet, desktop backend/frontend-helper tests, pack
 ## Frontend build dependency
 
 Desktop build runs API type generation, TypeScript checking and Vite before compiling the embedded backend. The frontend source and generated output are separate. See [frontend architecture](frontend-architecture.md).
+
+## Communications stage 1
+
+`infrastructure/communications` owns JSON facilities and validation; `communications_scheduling` evaluates links and association against immutable mobility. `simulation.Snapshot` composes the road/metro boundary with radio observations. The road executor exposes the loaded layout as static infrastructure data and does not import the radio executor. No communications session or protocol placeholder package is added.

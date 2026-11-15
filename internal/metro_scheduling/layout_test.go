@@ -7,7 +7,7 @@ import (
 )
 
 func TestExampleCircuitRunsAndLayerSeparation(t *testing.T) {
-	l, e := track.LoadLayout("../../example/Map1/metro.json")
+	l, e := track.LoadLayout("../testdata/signal-network/metro.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -60,7 +60,7 @@ func TestExampleCircuitRunsAndLayerSeparation(t *testing.T) {
 	}
 }
 func TestSameLevelCrossingAndSafeReconfiguration(t *testing.T) {
-	l, e := track.LoadLayout("../../example/Map1/metro.json")
+	l, e := track.LoadLayout("../testdata/signal-network/metro.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -98,7 +98,7 @@ func TestSameLevelCrossingAndSafeReconfiguration(t *testing.T) {
 	}
 }
 func TestMalformedExampleRejected(t *testing.T) {
-	l, e := track.LoadLayout("../../example/Map1/metro.json")
+	l, e := track.LoadLayout("../testdata/signal-network/metro.json")
 	if e != nil {
 		t.Fatal(e)
 	}

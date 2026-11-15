@@ -6,8 +6,8 @@ import (
 	track "traffic/internal/infrastructure/metro"
 )
 
-func TestMap3CircularLineCompletesBothDirections(t *testing.T) {
-	l, e := track.LoadLayout("../../example/Map3/metro.json")
+func TestRadialMap1CircularLineCompletesBothDirections(t *testing.T) {
+	l, e := track.LoadLayout("../../example/Map1/metro.json")
 	if e != nil {
 		t.Fatal(e)
 	}

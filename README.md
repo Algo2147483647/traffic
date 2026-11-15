@@ -15,6 +15,7 @@ the application. The optional web preview remains a separate project.
 For development, install **Node.js 22.13+** and **Go 1.24+**:
 
 ```bash
+npm ci
 cd desktop
 npm ci
 npm start
@@ -463,3 +464,7 @@ terminal circuits, layers and acceptance checks.
 ## React desktop frontend
 
 The active desktop UI is `frontend/src` (React + TypeScript + Canvas). Run `npm run frontend:build` before direct Go builds. Desktop packaging performs this step automatically. See [frontend architecture](docs/frontend-architecture.md) for component, rendering, interaction-state and API boundaries.
+
+## Active maps and radio baseline
+
+Map 1 is the radial grid and cloverleaf (replacing the former Map 3); Map 2 remains available. Map 1 includes a JSON-defined 256 m honeycomb with 700 base-station sites and 2,100 directional cells. See [communications scope, units, model limitations and export](docs/communications-baseline.md).

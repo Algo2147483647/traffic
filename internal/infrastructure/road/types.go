@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"traffic/internal/infrastructure/communications"
 	"traffic/internal/infrastructure/metro"
 )
 
@@ -175,20 +176,22 @@ type Interchange struct {
 }
 
 type CityConfig struct {
-	MetroFile         string               `json:"metro_file,omitempty"`
-	Metro             *metro.Layout        `json:"-"`
-	GeometryAlgorithm string               `json:"geometry_algorithm,omitempty"`
-	PhaseAlgorithm    string               `json:"phase_algorithm,omitempty"`
-	WorldUnitsPerKM   float64              `json:"world_units_per_km"`
-	Interchanges      []Interchange        `json:"interchanges,omitempty"`
-	Name              string               `json:"name"`
-	Description       string               `json:"description"`
-	DrivingSide       string               `json:"driving_side"`
-	MovementRules     MovementRulesConfig  `json:"movement_rules"`
-	Bounds            Bounds               `json:"bounds"`
-	Simulation        SimulationConfig     `json:"simulation"`
-	Intersections     []IntersectionConfig `json:"intersections"`
-	Ways              []WayConfig          `json:"ways"`
+	CommunicationsFile string                 `json:"communications_file,omitempty"`
+	Communications     *communications.Layout `json:"-"`
+	MetroFile          string                 `json:"metro_file,omitempty"`
+	Metro              *metro.Layout          `json:"-"`
+	GeometryAlgorithm  string                 `json:"geometry_algorithm,omitempty"`
+	PhaseAlgorithm     string                 `json:"phase_algorithm,omitempty"`
+	WorldUnitsPerKM    float64                `json:"world_units_per_km"`
+	Interchanges       []Interchange          `json:"interchanges,omitempty"`
+	Name               string                 `json:"name"`
+	Description        string                 `json:"description"`
+	DrivingSide        string                 `json:"driving_side"`
+	MovementRules      MovementRulesConfig    `json:"movement_rules"`
+	Bounds             Bounds                 `json:"bounds"`
+	Simulation         SimulationConfig       `json:"simulation"`
+	Intersections      []IntersectionConfig   `json:"intersections"`
+	Ways               []WayConfig            `json:"ways"`
 }
 
 func LoadConfig(path string) (CityConfig, error) {
@@ -207,6 +210,15 @@ func LoadConfig(path string) (CityConfig, error) {
 		cfg.Metro, err = metro.LoadLayout(filepath.Join(filepath.Dir(path), cfg.MetroFile))
 		if err != nil {
 			return CityConfig{}, fmt.Errorf("metro layout: %w", err)
+		}
+	}
+	if cfg.CommunicationsFile != "" {
+		if filepath.Base(cfg.CommunicationsFile) != cfg.CommunicationsFile {
+			return CityConfig{}, fmt.Errorf("communications file must be local to the example")
+		}
+		cfg.Communications, err = communications.Load(filepath.Join(filepath.Dir(path), cfg.CommunicationsFile))
+		if err != nil {
+			return CityConfig{}, fmt.Errorf("communications: %w", err)
 		}
 	}
 	return cfg, nil
@@ -305,6 +317,7 @@ type Edge struct {
 }
 
 type Graph struct {
+	Communications  *communications.Layout
 	Metro           *metro.Layout            `json:"-"`
 	WorldUnitsPerKM float64                  `json:"world_units_per_km"`
 	Interchanges    []Interchange            `json:"interchanges,omitempty"`

@@ -1,3 +1,5 @@
+import { RadioCharts } from "./RadioCharts";
+import { RadioInspector } from "./RadioInspector";
 import { useAppState, ui, emit } from "../state/store";
 import { MetroInspector } from "./MetroInspector";
 import { PersonInspector, OrderInspector } from "./PersonInspector";
@@ -21,16 +23,18 @@ export function Inspector() {
         {ui.collapsed ? "‹" : "›"}
       </button>
       <section className="glass inspector-overlay">
-        {!type && (
+        {!type && scene.mapView !== "communications" && (
           <div id="empty-inspector" className="empty-state">
             Select a vehicle or junction
           </div>
         )}
+        {type === "radio-site" && <RadioInspector />}
         {type === "metro-station" && <MetroInspector />}
         {type === "person" && <PersonInspector />}
         {type === "order" && <OrderInspector />}
         {type === "intersection" && <SignalInspector />}
         {type === "interchange" && <InterchangeInspector />}
+        {scene.mapView === "communications" && <RadioCharts />}
       </section>
     </aside>
   );

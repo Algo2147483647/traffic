@@ -7,7 +7,7 @@ import (
 )
 
 func TestExchangeDetailsMatchLiveQueues(t *testing.T) {
-	l, err := track.LoadLayout("../../example/Map3/metro.json")
+	l, err := track.LoadLayout("../../example/Map1/metro.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestExchangeDetailsMatchLiveQueues(t *testing.T) {
 	}
 }
 func TestArrivalForecastProgressAndDirection(t *testing.T) {
-	l, _ := track.LoadLayout("../../example/Map3/metro.json")
+	l, _ := track.LoadLayout("../../example/Map1/metro.json")
 	r := NewNetwork(l, l.Defaults).lines[3]
 	tr := r.trains[0]
 	tr.Station = 0
@@ -84,7 +84,7 @@ func TestArrivalForecastProgressAndDirection(t *testing.T) {
 }
 
 func TestTurningArrivalUsesRemainingLoop(t *testing.T) {
-	l, _ := track.LoadLayout("../../example/Map3/metro.json")
+	l, _ := track.LoadLayout("../../example/Map1/metro.json")
 	r := NewNetwork(l, l.Defaults).lines[0]
 	tr := r.trains[0]
 	tr.State = "turning"

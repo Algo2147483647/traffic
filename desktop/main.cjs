@@ -8,6 +8,7 @@ let cleaned = false;
 let window;
 const smoke = process.argv.includes('--smoke-test');
 app.setName('Meridian Traffic');
+if (smoke) app.setPath('userData', path.join(app.getPath('temp'), 'meridian-traffic-smoke'));
 
 async function createWindow() {
   window = new BrowserWindow({
@@ -27,6 +28,11 @@ async function createWindow() {
     const result = await window.webContents.executeJavaScript(`(${require("./react-smoke.cjs").toString()})()`);
     const output = process.env.TRAFFIC_SMOKE_OUTPUT || path.join(app.getPath('temp'), 'traffic-desktop-smoke.png');
     fs.writeFileSync(output, (await window.webContents.capturePage()).toPNG());
+    const hasRadio = await window.webContents.executeJavaScript(`!!document.querySelector('#radio-site-select')`);
+    if(hasRadio){
+      await window.webContents.executeJavaScript(`(async()=>{document.querySelector('#fit-button').click();document.querySelector('#view-communications').click();await new Promise(r=>setTimeout(r,200));})()`);
+      fs.writeFileSync(output.replace(/\.png$/i,'-radio.png'),(await window.webContents.capturePage()).toPNG());
+    }
     console.log(JSON.stringify({ ...result, screenshot: output }));
     app.quit();
   }

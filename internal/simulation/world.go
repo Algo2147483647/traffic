@@ -2,6 +2,7 @@ package simulation
 
 import (
 	"traffic/internal/foundation"
+ radio "traffic/internal/communications_scheduling"
 	model "traffic/internal/infrastructure/road"
 	rail "traffic/internal/metro_scheduling"
 	"traffic/internal/operations/demand"
@@ -15,6 +16,7 @@ type Simulation struct {
 	clock  *foundation.Clock
 	metro  *rail.Runtime
 	ledger *demand.Context
+ radio *radio.Runtime
 }
 
 func newWorld(g *model.Graph, adaptive bool) *Simulation {
@@ -23,6 +25,7 @@ func newWorld(g *model.Graph, adaptive bool) *Simulation {
 	return w
 }
 func (w *Simulation) resetMetro(g *model.Graph) road.MetroPort {
+ w.radio=radio.New(g.Communications)
 	c := rail.DefaultConfig()
 	if w.metro != nil {
 		c = w.metro.Snapshot().Config
@@ -48,7 +51,7 @@ func NewWithPolicy(g *model.Graph, id string, p map[string]float64) (*Simulation
 }
 
 type Command = road.Command
-type Snapshot = road.Snapshot
+
 type AlgorithmConfig = road.AlgorithmConfig
 type TaxiConfig = road.TaxiConfig
 type TaxiView = road.TaxiView

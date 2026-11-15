@@ -5,7 +5,7 @@ const load = require('./load-typescript.cjs');
 
 test('map gestures pan, zoom, select visible stations and detach completely', () => {
   const listeners = new Map();
-  const state = { camera: { panX: 0, panY: 0 }, transform: {}, city: { intersections: [], interchanges: [] }, snapshot: { people: [], metro: { interchanges: [{ id: 'exchange', position: { x: 20, y: 30 }, stations: [1] }], stations: [{ id: 1, elevation_m: -50 }] } } };
+  const state = { showRadio: false, camera: { panX: 0, panY: 0, zoom: 1 }, transform: {baseScale:1}, city: { intersections: [], interchanges: [] }, snapshot: { people: [], metro: { interchanges: [{ id: 'exchange', position: { x: 20, y: 30 }, stations: [1] }], stations: [{ id: 1, elevation_m: -50 }] } } };
   const canvas = {
     addEventListener: (name, fn) => listeners.set(name, fn),
     removeEventListener: (name, fn) => { if (listeners.get(name) === fn) listeners.delete(name); },
@@ -27,6 +27,8 @@ test('map gestures pan, zoom, select visible stations and detach completely', ()
   listeners.get('click')({ clientX: 30, clientY: 45 });
   assert.equal(selection.type, 'metro-station');
   assert.equal(selection.id, 'exchange');
+  state.showRadio=true;state.city.communications={sites:[{id:'BS1',position_m:{x:20,y:30,z:0},mast_height_m:25}]};
+  listeners.get('click')({clientX:30,clientY:45});assert.equal(selection.type,'radio-site');assert.equal(selection.id,'BS1');
   detach();
   assert.equal(listeners.size, 0);
 });

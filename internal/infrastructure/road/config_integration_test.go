@@ -6,7 +6,7 @@ import (
 )
 
 func TestMeridianCityConfig(t *testing.T) {
-	config, err := LoadConfig("../../../example/Map1/road.json")
+	config, err := LoadConfig("../../testdata/signal-network/road.json")
 	if err != nil {
 		t.Fatal(err)
 	}

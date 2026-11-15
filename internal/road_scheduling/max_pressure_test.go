@@ -189,7 +189,7 @@ func TestMaxPressureSanitizesInvalidQueueValues(t *testing.T) {
 }
 
 func TestSimulationAppliesNewMaximumPressureAtDecisionBoundary(t *testing.T) {
-	config, err := model.LoadConfig("../../example/Map1/road.json")
+	config, err := model.LoadConfig("../testdata/signal-network/road.json")
 	if err != nil {
 		t.Fatal(err)
 	}

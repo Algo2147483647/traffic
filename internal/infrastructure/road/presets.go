@@ -38,9 +38,10 @@ func LoadPresetDirectory(directory string) ([]PresetConfig, error) {
 				return nil, e
 			}
 			var manifest struct {
-				ID    string `json:"id"`
-				Road  string `json:"road"`
-				Metro string `json:"metro"`
+				Communications string `json:"communications"`
+				ID             string `json:"id"`
+				Road           string `json:"road"`
+				Metro          string `json:"metro"`
 			}
 			if e = json.Unmarshal(b, &manifest); e != nil {
 				return nil, e
@@ -53,7 +54,7 @@ func LoadPresetDirectory(directory string) ([]PresetConfig, error) {
 			if e != nil {
 				return nil, e
 			}
-			if cfg.MetroFile != manifest.Metro {
+			if cfg.MetroFile != manifest.Metro || cfg.CommunicationsFile != manifest.Communications {
 				return nil, fmt.Errorf("metro manifest mismatch")
 			}
 			presets = append(presets, PresetConfig{ID: manifest.ID, Path: path, Config: cfg})

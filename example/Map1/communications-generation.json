@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "coordinate_system": "local-meters-x-east-y-south-z-up",
+  "profile": {
+    "model": "log-distance",
+    "version": "1",
+    "reference_distance_m": 10,
+    "path_loss_exponent": 3,
+    "receiver_height_m": 1.5,
+    "receiver_gain_db": 0,
+    "vehicle_penetration_loss_db": 10,
+    "receiver_sensitivity_w": 3.162277660168379e-13,
+    "noise_figure_db": 7,
+    "temperature_k": 290
+  },
+  "deployment": {
+    "pattern": "hex-pointy",
+    "radius_m": 256,
+    "origin_m": {
+      "x": 128,
+      "y": 128,
+      "z": 0
+    },
+    "min_x_m": -5200,
+    "min_y_m": -5200,
+    "max_x_m": 5200,
+    "max_y_m": 5200
+  },
+  "mast_height_m": 25,
+  "sector_template": {
+    "downtilt_deg": 6,
+    "horizontal_beamwidth_deg": 65,
+    "vertical_beamwidth_deg": 15,
+    "peak_gain_db": 17,
+    "max_attenuation_db": 30,
+    "frequency_hz": 3500000000.0,
+    "bandwidth_hz": 20000000.0,
+    "transmit_power_w": 40
+  },
+  "sector_azimuths_deg": [
+    0,
+    120,
+    240
+  ]
+}

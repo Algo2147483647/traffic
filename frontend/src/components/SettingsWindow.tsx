@@ -1,3 +1,4 @@
+import { RadioSettings } from "./RadioSettings";
 import {
   Field,
   Action,
@@ -122,6 +123,7 @@ export function SettingsWindow() {
             step="0.1"
           ></Field>
         </label>
+        <RadioSettings />
         <MetroSettings />
         <DemandSettings />
         <AlgorithmSettings />

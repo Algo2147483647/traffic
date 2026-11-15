@@ -6,8 +6,8 @@ import (
 	track "traffic/internal/infrastructure/metro"
 )
 
-func TestMap3RealTransfersAndConservation(t *testing.T) {
-	l, e := track.LoadLayout("../../example/Map3/metro.json")
+func TestRadialMap1RealTransfersAndConservation(t *testing.T) {
+	l, e := track.LoadLayout("../../example/Map1/metro.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -52,6 +52,22 @@ func TestMap3RealTransfersAndConservation(t *testing.T) {
 		}
 		if tick%100 == 0 {
 			v := r.Snapshot()
+			for _, j := range v.Journeys {
+				if j.State == "onboard" {
+					found := false
+					for _, tr := range v.Trains {
+						if tr.ID == j.Train && j.Car >= 0 && j.Car < len(tr.CarPoses) {
+							found = true
+							if j.Position != tr.CarPoses[j.Car].Position || j.Elevation != tr.Elevation {
+								t.Fatal("passenger not on assigned car")
+							}
+						}
+					}
+					if !found {
+						t.Fatal("missing passenger carrier")
+					}
+				}
+			}
 			walking = walking || v.Transferring > 0
 			if v.Generated != v.Waiting+v.Onboard+v.Completed {
 				t.Fatalf("passengers lost: generated=%d waiting=%d aboard=%d completed=%d", v.Generated, v.Waiting, v.Onboard, v.Completed)
@@ -77,7 +93,7 @@ func TestMap3RealTransfersAndConservation(t *testing.T) {
 	}
 }
 func TestTransferWalkingPauseAndPlanIsolation(t *testing.T) {
-	l, e := track.LoadLayout("../../example/Map3/metro.json")
+	l, e := track.LoadLayout("../../example/Map1/metro.json")
 	if e != nil {
 		t.Fatal(e)
 	}

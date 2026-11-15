@@ -93,7 +93,7 @@ func finishAlgorithms(t *testing.T, s *Simulation) {
 }
 func workerGraph(t *testing.T) *model.Graph {
 	t.Helper()
-	c, e := model.LoadConfig("../../example/Map1/road.json")
+	c, e := model.LoadConfig("../testdata/signal-network/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}

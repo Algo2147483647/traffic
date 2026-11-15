@@ -117,3 +117,15 @@ export function exportRun() {
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+export async function exportCommunications() {
+  const data = await json<unknown>("/api/communications");
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "communications-observation.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

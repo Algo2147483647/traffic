@@ -8,7 +8,7 @@ import (
 )
 
 func TestWorldCoordinatesModesAndPreservesTasks(t *testing.T) {
-	c, e := model.LoadConfig("../../example/Map3/road.json")
+	c, e := model.LoadConfig("../../example/Map1/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}

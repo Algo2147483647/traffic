@@ -1,3 +1,4 @@
+import { MapViewButtons } from "./components/MapViewButtons";
 import { useEffect } from "react";
 import { connect } from "./api/client";
 import { emit } from "./state/store";
@@ -16,6 +17,7 @@ export function App() {
   return (
     <main className="dashboard">
       <MapCanvas />
+      <MapViewButtons />
       <SettingsButton />
       <SettingsWindow />
       <RailServiceWindow />

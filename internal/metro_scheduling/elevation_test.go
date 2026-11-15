@@ -7,7 +7,7 @@ import (
 )
 
 func TestPhysicalElevationConfiguration(t *testing.T) {
-	l, err := track.LoadLayout("../../example/Map3/metro.json")
+	l, err := track.LoadLayout("../../example/Map1/metro.json")
 	if err != nil {
 		t.Fatal(err)
 	}

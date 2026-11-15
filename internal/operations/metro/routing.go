@@ -9,6 +9,12 @@ type JourneyStep struct {
 	Seconds float64 `json:"estimated_seconds"`
 }
 type NetworkJourney struct {
+	Position    Point         `json:"position"`
+	Elevation   float64       `json:"elevation_m"`
+	Train       int           `json:"train_id,omitempty"`
+	Car         int           `json:"car_index"`
+	Speed       float64       `json:"speed_mps"`
+	Heading     float64       `json:"heading_rad"`
 	State       string        `json:"state"`
 	ID          int           `json:"id"`
 	JourneyID   int           `json:"journey_id"`

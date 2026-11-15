@@ -78,3 +78,13 @@ The desktop React smoke scenario uses actual DOM events, not store internals. It
 - Development and packaged Electron React scenarios passed: three presets, editable settings, floating windows, timetable changes, live taxi fleet, mixed demand, interchange and phase previews, station inspector, passenger itinerary and conserved population. The inspected transfer scenario reported three transferring passengers and a four-step itinerary, with no captured page errors.
 - The fixed Windows executable was rebuilt in `desktop/dist/win-unpacked/Meridian Traffic.exe`. The production backend hash is checked against `desktop/runtime/win-x64/traffic.exe`.
 - Windows runtime was verified. macOS uses the same frontend build; no macOS desktop runtime was available for this validation.
+
+## Radio overlay
+
+Map 1 now loads the former Map 3 geometry. `rendering/radio.ts` draws the JSON-defined 256 m honeycomb; `RadioSettings` and `RadioInspector` consume backend link-budget observations. The frontend performs no radio propagation calculation. Site and terminal display uses the existing physical-height slices.
+
+## Map presentation modes
+
+`MapViewButtons` switches the presentation state among All, Traffic and Communications. `RadioCharts` renders backend observations as received-power/SNR ECDFs, a site-user-count histogram and a bounded simulation-time history. `rendering/radio.ts` draws all serving links and smooth site-load heat, with no hexagonal boundary paths. Visibility does not send backend commands or reset tasks.
+
+Validation: TypeScript/build, server assets and all 10 desktop tests passed. Packaged UI regression and screenshot review confirmed the view buttons, communications charts/heat/links, existing route inspectors and passenger conservation with no captured page errors.

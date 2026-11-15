@@ -16,5 +16,6 @@ func (w *Simulation) advanceSubstep(dt float64, p road.TickPhases) {
 		p.CompleteJourney(id)
 	}
 	w.clock.Tick++
-	p.Commit()
+ p.Commit()
+ if w.radio!=nil&&w.radio.Due(w.clock.Time){s:=p.Observe();w.radio.Advance(s.Kernel,s.Time,mobility(s))}
 }

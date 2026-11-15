@@ -39,7 +39,13 @@ func BuildGraph(cfg CityConfig) (*Graph, error) {
 	applyMovementRuleDefaults(&cfg.MovementRules)
 	applySimulationDefaults(&cfg.Simulation)
 
+	if cfg.Communications != nil {
+		if err := cfg.Communications.Validate(); err != nil {
+			return nil, err
+		}
+	}
 	graph := &Graph{
+		Communications:  cfg.Communications,
 		WorldUnitsPerKM: cfg.WorldUnitsPerKM,
 		Interchanges:    cfg.Interchanges,
 		Name:            cfg.Name,

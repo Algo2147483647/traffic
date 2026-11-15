@@ -90,6 +90,15 @@ func newServer(simulation *sim.Simulation, logger *slog.Logger, current string, 
 	server := &Server{simulation: simulation, logger: logger, shutdown: make(chan struct{}), presets: presets, presetList: presetList, current: current}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", server.health)
+	mux.HandleFunc("GET /api/communications", func(w http.ResponseWriter, r *http.Request) {
+		snapshot := server.simulation.Snapshot()
+		observation := snapshot.Communications
+		if observation == nil {
+			server.writeError(w, 404, "This preset has no communications layout")
+			return
+		}
+		server.writeJSON(w, 200, map[string]any{"layout": snapshot.RadioLayout, "observation": observation})
+	})
 	mux.HandleFunc("GET /api/algorithms/workers", func(w http.ResponseWriter, r *http.Request) { server.writeJSON(w, 200, algorithms.List()) })
 	mux.HandleFunc("POST /api/commands", func(w http.ResponseWriter, r *http.Request) {
 		var e foundation.Envelope[sim.Command]

@@ -156,10 +156,12 @@ func (r *Runtime) transferView(v *View) {
 	v.Completed = r.completed
 	v.TransfersCompleted = r.transferCount
 	onboard := map[int]bool{}
+	carriers := map[int][2]int{}
 	for _, line := range r.lines {
 		for _, t := range line.trains {
 			for _, p := range t.onboard {
 				onboard[p.NetworkID] = true
+				carriers[p.NetworkID] = [2]int{line.lineID*100 + t.ID, p.Car}
 			}
 		}
 	}
@@ -178,6 +180,34 @@ func (r *Runtime) transferView(v *View) {
 			copy.State = "onboard"
 		}
 		copy.Plan = append([]JourneyStep(nil), j.Plan...)
+		step := j.Plan[j.Index]
+		a := v.Stations[step.From]
+		copy.Position = a.Position
+		copy.Elevation = a.Elevation
+		copy.Car = -1
+		if !j.Riding && step.Seconds > 0 {
+			b := v.Stations[step.To]
+			fraction := math.Max(0, math.Min(1, 1-(j.Ready-r.time)/step.Seconds))
+			copy.Position = Point{X: a.Position.X + (b.Position.X-a.Position.X)*fraction, Y: a.Position.Y + (b.Position.Y-a.Position.Y)*fraction}
+			copy.Elevation = a.Elevation + (b.Elevation-a.Elevation)*fraction
+		}
+		if carrier, ok := carriers[j.ID]; ok {
+			for _, train := range v.Trains {
+				if train.ID == carrier[0] {
+					copy.Train = train.ID
+					copy.Car = carrier[1]
+					copy.Position = train.Position
+					copy.Elevation = train.Elevation
+					copy.Speed = train.Speed
+					copy.Heading = train.Heading
+					if copy.Car >= 0 && copy.Car < len(train.CarPoses) {
+						copy.Position = train.CarPoses[copy.Car].Position
+						copy.Heading = train.CarPoses[copy.Car].Heading
+					}
+					break
+				}
+			}
+		}
 		v.Journeys = append(v.Journeys, copy)
 		if !j.Riding {
 			v.Transferring++

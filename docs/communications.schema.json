@@ -1,0 +1,232 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "coordinate_system",
+    "profile",
+    "sites"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "coordinate_system": {
+      "const": "local-meters-x-east-y-south-z-up"
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "version",
+        "reference_distance_m",
+        "path_loss_exponent",
+        "receiver_height_m",
+        "receiver_gain_db",
+        "vehicle_penetration_loss_db",
+        "receiver_sensitivity_w",
+        "noise_figure_db",
+        "temperature_k"
+      ],
+      "properties": {
+        "model": {
+          "const": "log-distance"
+        },
+        "version": {
+          "const": "1"
+        },
+        "reference_distance_m": {
+          "type": "number"
+        },
+        "path_loss_exponent": {
+          "type": "number"
+        },
+        "receiver_height_m": {
+          "type": "number"
+        },
+        "receiver_gain_db": {
+          "type": "number"
+        },
+        "vehicle_penetration_loss_db": {
+          "type": "number"
+        },
+        "receiver_sensitivity_w": {
+          "type": "number"
+        },
+        "noise_figure_db": {
+          "type": "number"
+        },
+        "temperature_k": {
+          "type": "number"
+        }
+      }
+    },
+    "sites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "position_m",
+          "mast_height_m",
+          "coverage_radius_m",
+          "sectors"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "position_m": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              }
+            }
+          },
+          "mast_height_m": {
+            "type": "number",
+            "minimum": 0
+          },
+          "sectors": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "azimuth_deg",
+                "downtilt_deg",
+                "horizontal_beamwidth_deg",
+                "vertical_beamwidth_deg",
+                "peak_gain_db",
+                "max_attenuation_db",
+                "frequency_hz",
+                "bandwidth_hz",
+                "transmit_power_w"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "azimuth_deg": {
+                  "type": "number"
+                },
+                "downtilt_deg": {
+                  "type": "number"
+                },
+                "horizontal_beamwidth_deg": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "vertical_beamwidth_deg": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "peak_gain_db": {
+                  "type": "number"
+                },
+                "max_attenuation_db": {
+                  "type": "number"
+                },
+                "frequency_hz": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "bandwidth_hz": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "transmit_power_w": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              }
+            }
+          },
+          "coverage_radius_m": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pattern",
+        "radius_m",
+        "origin_m",
+        "min_x_m",
+        "min_y_m",
+        "max_x_m",
+        "max_y_m"
+      ],
+      "properties": {
+        "pattern": {
+          "const": "hex-pointy"
+        },
+        "radius_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "origin_m": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x",
+            "y",
+            "z"
+          ],
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          }
+        },
+        "min_x_m": {
+          "type": "number"
+        },
+        "min_y_m": {
+          "type": "number"
+        },
+        "max_x_m": {
+          "type": "number"
+        },
+        "max_y_m": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Baseline communications layout v1"
+}

@@ -1,6 +1,6 @@
 # Base stations and research communications simulation — proposed design
 
-Status: design only. No radio fidelity or communications capability is claimed by placing a base-station icon on the map.
+Status: stage 1 implemented on Map 1. See [baseline implementation](communications-baseline.md). Stages 2–4 remain planned; no full NR radio fidelity is claimed.
 
 ## Domain boundaries
 
@@ -49,4 +49,4 @@ Use the same metre-based height slices for site antenna positions and moving UEs
 - `internal/algorithms/experiments`: injected communications or coupled-world experiment sessions.
 - `internal/simulation`: coupling barriers and stable person/vehicle/train-to-UE binding.
 
-There is deliberately no communications runtime, empty package or placeholder interface in this refactor. The UI must not imply that a radio model exists until an actual model and its validation are delivered.
+Stage 1 now has a real infrastructure loader and deterministic communications observer. Environment/materials, application sessions and external-engine adapters remain future work, with no empty packages.

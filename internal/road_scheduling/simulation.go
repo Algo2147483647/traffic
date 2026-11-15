@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 	"traffic/internal/foundation"
+	"traffic/internal/infrastructure/communications"
 	"traffic/internal/infrastructure/road/interchange"
 	"traffic/internal/operations/demand"
 	"traffic/internal/operations/metro"
@@ -68,7 +69,8 @@ type Stats struct {
 }
 
 type Snapshot struct {
-	Metro metro.View `json:"metro"`
+	RadioLayout *communications.Layout `json:"-"`
+	Metro       metro.View             `json:"metro"`
 
 	Demand *demand.Summary `json:"demand,omitempty"`
 
@@ -156,6 +158,7 @@ type SignalState struct {
 }
 
 type CityView struct {
+	Communications    *communications.Layout    `json:"communications,omitempty"`
 	MacroInterchanges []interchange.Node        `json:"macro_interchanges,omitempty"`
 	WorldUnitsPerKM   float64                   `json:"world_units_per_km"`
 	Interchanges      []model.Interchange       `json:"interchanges,omitempty"`
@@ -277,7 +280,7 @@ func (s *Simulation) City() CityView {
 }
 
 func (s *Simulation) cityLocked() CityView {
-	return CityView{MacroInterchanges: interchange.Build(s.graph), Interchanges: s.graph.Interchanges,
+	return CityView{Communications: s.graph.Communications, MacroInterchanges: interchange.Build(s.graph), Interchanges: s.graph.Interchanges,
 		WorldUnitsPerKM: s.graph.WorldUnitsPerKM, Name: s.graph.Name, Description: s.graph.Description, DrivingSide: s.graph.DrivingSide, MovementRules: s.graph.MovementRules, Bounds: s.graph.Bounds,
 		Simulation: s.graph.Simulation, Intersections: s.graph.SortedIntersections(),
 		Ways: s.graph.SortedWays(), Edges: append([]model.Edge(nil), s.graph.Edges...),
@@ -355,6 +358,7 @@ func (s *Simulation) advanceLocked(dt float64) { s.clock.AdvanceFixed(dt, s.adva
 // Snapshot readers acquire the same lock and only see a completed boundary.
 func (s *Simulation) advanceSubstep(dt float64) {
 	s.coordinate(dt, TickPhases{
+ Observe:s.snapshotLocked,
 		Prepare: func() bool {
 			wasPaused, run := s.clock.Paused, s.stamp.Run
 			s.drainCommandsLocked()
@@ -898,8 +902,13 @@ func (s *Simulation) setTimeScaleLocked(scale float64) {
 
 func (s *Simulation) Snapshot() Snapshot {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	snapshot := Snapshot{Metro: s.metro.Snapshot(), Algorithms: s.algorithmView(), WalkSpeed: s.walkSpeed, Kernel: s.stamp, City: s.graph.Name, Time: s.clock.Time, Tick: s.clock.Tick, Paused: s.clock.Paused, TimeScale: s.clock.Rate,
+ defer s.mu.RUnlock()
+ return s.snapshotLocked()
+}
+// Inspect provides a coherent boundary to world-owned observers under the same lock.
+func(s *Simulation) Inspect(f func(Snapshot)) {s.mu.RLock();defer s.mu.RUnlock();f(s.snapshotLocked())}
+func(s *Simulation) snapshotLocked() Snapshot {
+ snapshot := Snapshot{RadioLayout: s.graph.Communications, Metro: s.metro.Snapshot(), Algorithms: s.algorithmView(), WalkSpeed: s.walkSpeed, Kernel: s.stamp, City: s.graph.Name, Time: s.clock.Time, Tick: s.clock.Tick, Paused: s.clock.Paused, TimeScale: s.clock.Rate,
 		Load:    LoadState{Population: len(s.people), SpawnRate: s.spawnRate, MaxPopulation: s.maxPeople},
 		Spacing: SpacingState{SafeGap: s.safeGap, VehicleSize: s.graph.Simulation.VehicleSize},
 		People:  make([]Person, len(s.people)), Signals: s.signalStates()}

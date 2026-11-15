@@ -15,7 +15,7 @@ func TestExternalScenarioPlanners(t *testing.T) {
 	dir, _ := filepath.Abs("../../../experiments/algorithms")
 	for _, cap := range []string{"geometry", "phases"} {
 		t.Run(cap, func(t *testing.T) {
-			c, e := LoadConfig("../../../example/Map1/road.json")
+			c, e := LoadConfig("../../testdata/signal-network/road.json")
 			if e != nil {
 				t.Fatal(e)
 			}

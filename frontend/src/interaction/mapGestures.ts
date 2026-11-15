@@ -83,6 +83,26 @@ export function bindMapGestures(
   on("click", (event) => {
     if (!state.snapshot || !state.transform) return;
     const click = canvasPoint(event);
+    if (state.showRadio && state.mapView !== "traffic") {
+      const site = state.city.communications?.sites.find(
+        (s) =>
+          levelVisible(s.position_m.z + s.mast_height_m) &&
+          Math.hypot(
+            screen(s.position_m).x - click.x,
+            screen(s.position_m).y - click.y,
+          ) <
+            Math.max(
+              4,
+              Math.min(10, state.transform.baseScale * state.camera.zoom * 22),
+            ),
+      );
+      if (site) {
+        select({ type: "radio-site", id: site.id });
+        draw();
+        return;
+      }
+    }
+    if (state.mapView === "communications") return;
     const metro = state.snapshot.metro;
     const exchange = (metro?.interchanges || [])
       .filter((x) =>

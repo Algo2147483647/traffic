@@ -1,0 +1,32 @@
+{
+  "name": "Radial Grid and Cloverleaf",
+  "description": "Central cloverleaf, concentric arterial rings and an axis-connected local grid.",
+  "driving_side": "right",
+  "movement_rules": {
+    "through_tolerance_degrees": 40,
+    "u_turn_tolerance_degrees": 35
+  },
+  "bounds": {
+    "min_x": -5200,
+    "min_y": -5200,
+    "max_x": 5200,
+    "max_y": 5200
+  },
+  "simulation": {
+    "people": 320,
+    "spawn_rate_per_second": 0,
+    "max_people": 1000,
+    "tick_ms": 50,
+    "walk_speed": 1.4,
+    "drive_speed": 26.38888889,
+    "safe_gap": 2.5,
+    "spawn_margin": 20,
+    "seed": 20260830,
+    "snapshot_fps": 12,
+    "vehicle_size": 6,
+    "intersection_radius": 58,
+    "arrival_dwell_seconds": 5
+  },
+  "metro_file": "metro.json",
+  "communications_file": "communications.json"
+}

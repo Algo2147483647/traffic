@@ -7,6 +7,30 @@ export function Statistics() {
     p = s?.control_performance;
   const time = s?.time || 0;
   const fmt = (v = 0) => v.toFixed(1);
+  if (scene.mapView === "communications") {
+    const r = s?.communications;
+    return (
+      <section
+        className="glass stats-overlay"
+        aria-label="Communications statistics"
+      >
+        <div className="stat-primary">
+          <div>
+            <strong>{r?.connected || 0}</strong>
+            <span>connected users</span>
+          </div>
+          <strong>{time.toFixed(1)} s</strong>
+        </div>
+        <p>
+          {r?.terminals.length || 0} terminals · {r?.outage || 0} outage ·{" "}
+          {r?.unsupported || 0} outside model
+        </p>
+        <p className="radio-note">
+          Received power · thermal-noise SNR · user-count heat
+        </p>
+      </section>
+    );
+  }
   return (
     <section
       className="glass stats-overlay"

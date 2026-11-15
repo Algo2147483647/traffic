@@ -1,5 +1,6 @@
 // Generated from Go JSON contracts by go run ./scripts/api-types. Do not hand edit.
 export interface City {
+  "communications"?: CommunicationsLayout;
   "macro_interchanges"?: Array<InterchangeNode>;
   "world_units_per_km": number;
   "interchanges"?: Array<RoadInterchange>;
@@ -12,6 +13,114 @@ export interface City {
   "intersections": Array<RoadIntersection>;
   "ways": Array<RoadWay>;
   "edges": Array<RoadEdge>;
+}
+
+export interface CommunicationsDeployment {
+  "pattern": string;
+  "radius_m": number;
+  "origin_m": CommunicationsPosition;
+  "min_x_m": number;
+  "min_y_m": number;
+  "max_x_m": number;
+  "max_y_m": number;
+}
+
+export interface CommunicationsLayout {
+  "deployment"?: CommunicationsDeployment;
+  "schema_version": number;
+  "coordinate_system": string;
+  "profile": CommunicationsProfile;
+  "sites": Array<CommunicationsSite>;
+}
+
+export interface CommunicationsPosition {
+  "x": number;
+  "y": number;
+  "z": number;
+}
+
+export interface CommunicationsProfile {
+  "model": string;
+  "version": string;
+  "reference_distance_m": number;
+  "path_loss_exponent": number;
+  "receiver_height_m": number;
+  "receiver_gain_db": number;
+  "vehicle_penetration_loss_db": number;
+  "receiver_sensitivity_w": number;
+  "noise_figure_db": number;
+  "temperature_k": number;
+}
+
+export interface CommunicationsSchedulingCell {
+  "id": string;
+  "site_id": string;
+  "associated": number;
+}
+
+export interface CommunicationsSchedulingLink {
+  "site_id": string;
+  "cell_id": string;
+  "distance_m": number;
+  "path_loss_db": number;
+  "antenna_gain_db": number;
+  "received_power_w": number;
+  "noise_power_w": number;
+  "snr_db": number;
+}
+
+export interface CommunicationsSchedulingPose {
+  "id": string;
+  "kind": string;
+  "entity_id": number;
+  "carrier"?: string;
+  "position_m": CommunicationsPosition;
+  "speed_mps": number;
+  "heading_rad": number;
+  "in_vehicle": boolean;
+  "underground": boolean;
+}
+
+export interface CommunicationsSchedulingTerminal extends CommunicationsSchedulingPose {
+  "status": string;
+  "serving_cell"?: string;
+  "neighbours": Array<CommunicationsSchedulingLink>;
+}
+
+export interface CommunicationsSchedulingView {
+  "schema_version": number;
+  "model": string;
+  "model_version": string;
+  "fidelity": string;
+  "stamp": FoundationStamp;
+  "time_us": number;
+  "connected": number;
+  "outage": number;
+  "unsupported": number;
+  "cells": Array<CommunicationsSchedulingCell>;
+  "terminals": Array<CommunicationsSchedulingTerminal>;
+}
+
+export interface CommunicationsSector {
+  "id": string;
+  "azimuth_deg": number;
+  "downtilt_deg": number;
+  "horizontal_beamwidth_deg": number;
+  "vertical_beamwidth_deg": number;
+  "peak_gain_db": number;
+  "max_attenuation_db": number;
+  "frequency_hz": number;
+  "bandwidth_hz": number;
+  "transmit_power_w": number;
+}
+
+export interface CommunicationsSite {
+  "id": string;
+  "name": string;
+  "position_m": CommunicationsPosition;
+  "mast_height_m": number;
+  "coverage_radius_m": number;
+  "sectors": Array<CommunicationsSector>;
 }
 
 export interface DemandConfig {
@@ -143,6 +252,12 @@ export interface MetroLineView {
 }
 
 export interface MetroNetworkJourney {
+  "position": GeometryPoint;
+  "elevation_m": number;
+  "train_id"?: number;
+  "car_index": number;
+  "speed_mps": number;
+  "heading_rad": number;
   "state": string;
   "id": number;
   "journey_id": number;
@@ -470,6 +585,27 @@ export interface RoadSchedulingSignalState {
   "extension_seconds": number;
 }
 
+export interface RoadSchedulingSnapshot {
+  "metro": MetroView;
+  "demand"?: DemandSummary;
+  "algorithms": RoadSchedulingAlgorithmView;
+  "walk_speed_mps": number;
+  "kernel": FoundationStamp;
+  "mode": string;
+  "taxi"?: RoadSchedulingTaxiView;
+  "city": string;
+  "time": number;
+  "tick": number;
+  "paused": boolean;
+  "time_scale": number;
+  "people": Array<RoadSchedulingPerson>;
+  "stats": RoadSchedulingStats;
+  "load": RoadSchedulingLoadState;
+  "spacing": RoadSchedulingSpacingState;
+  "signals": Array<RoadSchedulingSignalState>;
+  "control_performance": RoadSchedulingControlPerformance;
+}
+
 export interface RoadSchedulingSpacingState {
   "safe_gap": number;
   "vehicle_size": number;
@@ -608,25 +744,8 @@ export interface RoadWay {
   "segments": Array<RoadSegment>;
 }
 
-export interface Snapshot {
-  "metro": MetroView;
-  "demand"?: DemandSummary;
-  "algorithms": RoadSchedulingAlgorithmView;
-  "walk_speed_mps": number;
-  "kernel": FoundationStamp;
-  "mode": string;
-  "taxi"?: RoadSchedulingTaxiView;
-  "city": string;
-  "time": number;
-  "tick": number;
-  "paused": boolean;
-  "time_scale": number;
-  "people": Array<RoadSchedulingPerson>;
-  "stats": RoadSchedulingStats;
-  "load": RoadSchedulingLoadState;
-  "spacing": RoadSchedulingSpacingState;
-  "signals": Array<RoadSchedulingSignalState>;
-  "control_performance": RoadSchedulingControlPerformance;
+export interface Snapshot extends RoadSchedulingSnapshot {
+  "communications"?: CommunicationsSchedulingView;
 }
 
 export interface TaxiConfig {

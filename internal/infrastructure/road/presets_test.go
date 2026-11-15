@@ -101,7 +101,7 @@ func TestExampleFoldersLoadRoadAndMetro(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 3 {
+	if len(entries) != 2 {
 		t.Fatal("example discovery", len(entries))
 	}
 	for _, entry := range entries {
@@ -109,34 +109,11 @@ func TestExampleFoldersLoadRoadAndMetro(t *testing.T) {
 			t.Fatal("metro sidecar not loaded", entry.ID)
 		}
 		if entry.ID == "preset-1" {
-			ring := 0
-			for _, w := range entry.Config.Ways {
-				if w.Name != "Central Ring" {
-					continue
-				}
-				ring++
-				for _, p := range w.Points {
-					if math.Abs(math.Hypot(p.X-3000, p.Y-3000)-2000) > .001 {
-						t.Fatal("ring radius")
-					}
-				}
+			if entry.Config.Communications == nil || len(entry.Config.Metro.Lines) != 4 || len(entry.Config.Interchanges) != 1 {
+				t.Fatal("replacement map did not load its facilities")
 			}
-			if ring != 16 {
-				t.Fatal("incomplete directed ring")
-			}
-			for _, id := range []string{"CNW", "CNE", "CSW", "CSE"} {
-				spokes := 0
-				for _, w := range entry.Config.Ways {
-					if w.From == id && w.Name != "Central Ring" {
-						spokes++
-						if w.To != id[1:]+"H" {
-							t.Fatal("branch still attached to an outer loop", w.ID)
-						}
-					}
-				}
-				if spokes != 1 {
-					t.Fatal("branch needs exactly one outward spoke", id, spokes)
-				}
+			if entry.Config.Interchanges[0].Type != "cloverleaf" || entry.Config.Interchanges[0].Center != (Vec2{}) {
+				t.Fatal("central cloverleaf origin")
 			}
 		}
 	}

@@ -1,13 +1,13 @@
-"""Build Map 3 from its JSON materials; all distances are metres."""
+"""Build Map 1 from its JSON materials; all distances are metres."""
 import copy, json, math
 from pathlib import Path
 from interchanges.cloverleaf import build_cloverleaf, compile_flow_connections
 ROOT=Path(__file__).resolve().parents[1]
-OUT=ROOT/'example/Map3'
+OUT=ROOT/'example/Map1'
 p=json.loads((OUT/'generation.json').read_text())
 base=json.loads((OUT/p['source']/'road.json').read_text())
 city={k:copy.deepcopy(v) for k,v in base.items() if k not in ('intersections','ways','interchanges')}
-city.update(name='Map 3 - Radial Grid',description='Central cloverleaf, concentric arterial rings and an axis-connected local grid.',intersections=[],ways=[],interchanges=[],bounds=p["bounds"])
+city.update(name='Radial Grid and Cloverleaf',description='Central cloverleaf, concentric arterial rings and an axis-connected local grid.',intersections=[],ways=[],interchanges=[],bounds=p["bounds"])
 cx,cy=p['center'];nodes={}
 profile=json.loads((OUT/p['interchange_profile']).read_text())['cloverleaf']
 def node(id,x,y,layer=0,group='',flow=False):
@@ -143,4 +143,4 @@ for i,station in enumerate(ring['stations']):
             if math.hypot(station['x']-other['x'],station['y']-other['y'])<.001:
                 metro['transfers'].append(dict(id=f'X{i+1}',name=f'Exchange {i+1}',a=[line['id'],j],b=[ring['id'],i],seconds=p['transfer_walk_seconds']))
 (OUT/'metro.json').write_text(json.dumps(metro,indent=2)+'\n')
-print(f'Map 3: {len(nodes)} nodes, {len(city["ways"])} directed roads, {len(metro["lines"])} metro lines')
+print(f'Map 1: {len(nodes)} nodes, {len(city["ways"])} directed roads, {len(metro["lines"])} metro lines')

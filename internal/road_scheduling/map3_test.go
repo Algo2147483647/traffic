@@ -6,8 +6,8 @@ import (
 	"traffic/internal/operations/demand"
 )
 
-func TestMap3TaxiService(t *testing.T) {
-	c, e := model.LoadConfig("../../example/Map3/road.json")
+func TestRadialMap1TaxiService(t *testing.T) {
+	c, e := model.LoadConfig("../../example/Map1/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -30,12 +30,12 @@ func TestMap3TaxiService(t *testing.T) {
 		s.Step(.05)
 	}
 	if s.taxi.completed < 2 || !s.auditDemand().Conserved {
-		t.Fatalf("Map3 service failed: completed=%d accounting=%+v", s.taxi.completed, s.auditDemand())
+		t.Fatalf("Map1 service failed: completed=%d accounting=%+v", s.taxi.completed, s.auditDemand())
 	}
 }
 
-func TestMap3TunnelVehiclePassage(t *testing.T) {
-	c, e := model.LoadConfig("../../example/Map3/road.json")
+func TestRadialMap1TunnelVehiclePassage(t *testing.T) {
+	c, e := model.LoadConfig("../../example/Map1/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -80,8 +80,8 @@ func TestMap3TunnelVehiclePassage(t *testing.T) {
 	}
 }
 
-func TestMap3SharedTransferTasksConserved(t *testing.T) {
-	c, e := model.LoadConfig("../../example/Map3/road.json")
+func TestRadialMap1SharedTransferTasksConserved(t *testing.T) {
+	c, e := model.LoadConfig("../../example/Map1/road.json")
 	if e != nil {
 		t.Fatal(e)
 	}

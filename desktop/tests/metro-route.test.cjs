@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const route=require('./load-typescript.cjs')(path.join(__dirname,'../../frontend/src/rendering/metroRoute.ts'));
-const layout=JSON.parse(fs.readFileSync(path.join(__dirname,'../../example/Map3/metro.json'),'utf8'));
+const layout=JSON.parse(fs.readFileSync(path.join(__dirname,'../../example/Map1/metro.json'),'utf8'));
 test('directional itinerary follows real tracks including ring wrap and reverse',()=>{
  for(const spec of layout.lines){const line={...spec,track:spec.route,reverse_track:spec.reverse_route,stations:spec.stations.map((_,i)=>i)};
   for(let a=0;a<line.stations.length;a++)for(let b=0;b<line.stations.length;b++)if(a!==b){

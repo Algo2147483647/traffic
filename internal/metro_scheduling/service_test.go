@@ -23,7 +23,7 @@ func carsOverlap(a, b CarPose, length, width float64) bool {
 	return true
 }
 func TestPlannedFleetTimetableAndPassengerPreservation(t *testing.T) {
-	l, e := track.LoadLayout("../../example/Map3/metro.json")
+	l, e := track.LoadLayout("../../example/Map1/metro.json")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -122,7 +122,7 @@ func TestServicePlannerRejectsUnsafePlanAtomically(t *testing.T) {
 	_ = RegisterServicePlanner(id, func(in ServiceInput) (ServicePlan, error) {
 		return ServicePlan{Line: in.Line, Fleet: 200, Headway: 1}, nil
 	})
-	l, _ := track.LoadLayout("../../example/Map3/metro.json")
+	l, _ := track.LoadLayout("../../example/Map1/metro.json")
 	r := NewNetwork(l, l.Defaults)
 	c := l.Defaults
 	c.Service = &ServiceConfig{Algorithm: id, Headway: 100}

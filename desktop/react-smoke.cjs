@@ -51,7 +51,7 @@ module.exports = async function reactSmoke() {
     await wait(80);
   };
   await until(
-    () => q("#map-preset")?.options.length === 3,
+    () => q("#map-preset")?.options.length === 2,
     "React did not mount/load presets",
   );
   await click("#settings-toggle");
@@ -112,11 +112,9 @@ module.exports = async function reactSmoke() {
     "Time scale",
   );
   await fill("#time-scale", 1);
-  await fill("#map-preset", "radial-grid-cloverleaf");
+  await fill("#map-preset", "preset-1");
   await until(
-    async () =>
-      (await get("/api/presets")).current_preset_id ===
-      "radial-grid-cloverleaf",
+    async () => (await get("/api/presets")).current_preset_id === "preset-1",
     "Map switch",
   );
   await control({ action: "pause" });
@@ -197,6 +195,38 @@ module.exports = async function reactSmoke() {
       (await get("/api/snapshot")).metro.lines[0].elevation_m === -52.25,
     "Metro elevation",
   );
+  const radioBefore = await get("/api/communications");
+  assert(
+    radioBefore.layout.sites.length === 700 &&
+      radioBefore.observation.cells.length === 2100,
+    "Radio preset",
+  );
+  await fill(
+    "#radio-site-select",
+    radioBefore.layout.sites.find(
+      (s) => Math.hypot(s.position_m.x, s.position_m.y) < 256,
+    ).id,
+  );
+  assert(q("#radio-inspector"), "Radio inspector");
+  assert(q("#radio-terminal").options.length > 1, "Radio terminals");
+  await fill("#radio-terminal", q("#radio-terminal").options[1].value);
+  assert(q("#radio-terminal-status").textContent, "Terminal details");
+  await click("#view-communications");
+  assert(q("#radio-charts svg"), "Radio charts");
+  assert(!q("#show-radio-sectors"), "Hex outlines removed");
+  await click("#view-traffic");
+  assert(
+    q("#view-traffic").getAttribute("aria-pressed") === "true",
+    "Traffic view",
+  );
+  await click("#view-all");
+  await click("#show-radio");
+  await click("#show-radio");
+  const radioAfter = await get("/api/communications");
+  assert(
+    radioAfter.observation.time_us === radioBefore.observation.time_us,
+    "Presentation changed clock",
+  );
   // Test actual interchange route previews, then ordinary signal phase copies.
   await click("#settings-close");
   await click("#fit-button");
@@ -225,8 +255,34 @@ module.exports = async function reactSmoke() {
   labels.clear();
   await click("#fit-button");
   await wait(100);
-  const entry = [...labels].find(([k]) => k.startsWith("AC  "));
-  assert(entry, "Map 1 central label");
+  for (let i = 0; i < 4; i++) await click("#zoom-in-button");
+  const signalCity = await get("/api/city");
+  const signal = signalCity.intersections.find(
+    (n) =>
+      n.traffic_control.mode !== "flow" &&
+      !n.interchange &&
+      n.traffic_control.phases.length > 0 &&
+      labels.has(n.id + "  " + n.name.toUpperCase()) &&
+      labels.get(n.id + "  " + n.name.toUpperCase()).x > 200 &&
+      labels.get(n.id + "  " + n.name.toUpperCase()).x < innerWidth - 500 &&
+      labels.get(n.id + "  " + n.name.toUpperCase()).y > 100 &&
+      labels.get(n.id + "  " + n.name.toUpperCase()).y < innerHeight - 200,
+  );
+  assert(
+    signal,
+    "Visible grid signal: " +
+      JSON.stringify({
+        labels: [...labels.keys()].slice(-20),
+        count: signalCity.intersections.filter(
+          (n) => n.traffic_control.phases.length > 0,
+        ).length,
+        zoom: q("#view-scale")?.textContent,
+      }),
+  );
+  const entry = [
+    signal.id,
+    labels.get(signal.id + "  " + signal.name.toUpperCase()),
+  ];
   p = entry[1];
   canvas.dispatchEvent(
     new MouseEvent("click", {
@@ -240,7 +296,7 @@ module.exports = async function reactSmoke() {
     q("#signal-movements canvas") && q("#signal-plan .phase-row"),
     "Signal phase copies",
   );
-  await fill("#map-preset", "radial-grid-cloverleaf");
+  await fill("#map-preset", "preset-1");
   await wait(200);
   await control({ action: "pause" });
   await control({
@@ -340,13 +396,15 @@ module.exports = async function reactSmoke() {
   assert(errors.length === 0, errors.join("; "));
   return {
     framework: "React + TypeScript + Canvas",
-    presets: 3,
+    presets: 2,
     settings: true,
     interchange: true,
     signalPhases: true,
     transferring: snap.metro.transferring,
     routeSteps: q("#metro-passenger-path").children.length,
     conserved: snap.demand.conserved,
+    radioSites: 700,
+    radioCells: 2100,
     errors,
   };
 };

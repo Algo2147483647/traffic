@@ -1,3 +1,4 @@
+import { drawRadio } from "./radio";
 import type { SceneState } from "../state/store";
 import type { Snapshot } from "../api/models";
 import * as MetroRoute from "./metroRoute";
@@ -203,47 +204,54 @@ export function createRenderer(
     const { width, height } = currentTransform();
     ctx.clearRect(0, 0, width, height);
     drawBackdrop(width, height);
-    drawMetro();
-    const levels = [null];
-    for (const level of levels) {
-      renderLevel = level;
-      for (const layer of ["tunnel", "ground", "ramp", "bridge"]) {
-        renderStructure = layer;
-        drawWays();
-        drawIntersectionPads();
-        drawSelectedTrip();
-        drawSignals();
-        drawLaneDirectionMarkings();
-        drawIntersections();
-        drawTaxiStops();
-        drawPeople();
+    if (state.mapView !== "communications") {
+      drawMetro();
+      const levels = [null];
+      for (const level of levels) {
+        renderLevel = level;
+        for (const layer of ["tunnel", "ground", "ramp", "bridge"]) {
+          renderStructure = layer;
+          drawWays();
+          drawIntersectionPads();
+          drawSelectedTrip();
+          drawSignals();
+          drawLaneDirectionMarkings();
+          drawIntersections();
+          drawTaxiStops();
+          drawPeople();
+        }
       }
+      renderStructure = null;
+      renderLevel = null;
+      const groups = new Map();
+      state.city.intersections.forEach((n) => {
+        if (n.interchange && nodeVisible(n) && !groups.has(n.interchange))
+          groups.set(n.interchange, n);
+      });
+      ctx.font = "12px Times New Roman";
+      ctx.fillStyle = "#dddddd";
+      groups.forEach((n, id) => {
+        const members = state.city.intersections.filter(
+            (i) => i.interchange === id,
+          ),
+          p = screen({
+            x: members.reduce((a, n) => a + n.position.x, 0) / members.length,
+            y: members.reduce((a, n) => a + n.position.y, 0) / members.length,
+          });
+        ctx.fillText(
+          (state.city.interchanges || []).find((g) => g.id === id)?.name ||
+            `${id} interchange`,
+          p.x + 12,
+          p.y - 28,
+        );
+      });
+      drawMetroPassengerRoute();
     }
-    renderStructure = null;
-    renderLevel = null;
-    const groups = new Map();
-    state.city.intersections.forEach((n) => {
-      if (n.interchange && nodeVisible(n) && !groups.has(n.interchange))
-        groups.set(n.interchange, n);
-    });
-    ctx.font = "12px Times New Roman";
-    ctx.fillStyle = "#dddddd";
-    groups.forEach((n, id) => {
-      const members = state.city.intersections.filter(
-          (i) => i.interchange === id,
-        ),
-        p = screen({
-          x: members.reduce((a, n) => a + n.position.x, 0) / members.length,
-          y: members.reduce((a, n) => a + n.position.y, 0) / members.length,
-        });
-      ctx.fillText(
-        (state.city.interchanges || []).find((g) => g.id === id)?.name ||
-          `${id} interchange`,
-        p.x + 12,
-        p.y - 28,
-      );
-    });
-    drawMetroPassengerRoute();
+    const panels = overlays();
+    drawRadio(ctx, state, screen, levelVisible, currentTransform().scale, [
+      panels.stats,
+      ...(panels.detailsOpen ? [panels.details] : []),
+    ]);
     drawCoordinateRulers();
   }
   function drawCoordinateRulers() {
