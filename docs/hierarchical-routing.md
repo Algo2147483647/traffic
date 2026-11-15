@@ -2,8 +2,8 @@
 
 ## Runtime ownership
 
-`internal/infrastructure/interchange/routing.go` owns the reusable two-level
-planner. `internal/road/routing.go` supplies the congestion snapshot, experimental
+`internal/road_scheduling/routing/routing.go` owns the reusable two-level
+planner. `internal/road_scheduling/routing.go` supplies the congestion snapshot, experimental
 road costs and physically bounded lane-preparation rule. The same planner serves
 ordinary vehicle spawning, taxi pickup, taxi delivery, idle cruising and immediate
 congestion rerouting. Accepting an order still excludes the taxi from all further

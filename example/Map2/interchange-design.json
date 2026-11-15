@@ -10,7 +10,7 @@
     "split_station": 620,
     "cd_station": 480,
     "portal_station": 870,
-    "deck_height": 6.5,
+    "deck_height": 5,
     "sample_spacing": 2,
     "mainline_lanes": 3,
     "cd_lanes": 2,

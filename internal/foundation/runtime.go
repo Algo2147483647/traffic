@@ -2,10 +2,11 @@ package foundation
 
 // Clock is advanced only by the owning simulation, never by a renderer or policy.
 type Clock struct {
-	Time   float64
-	Tick   uint64
-	Paused bool
-	Rate   float64
+	remainder float64
+	Time      float64
+	Tick      uint64
+	Paused    bool
+	Rate      float64
 }
 type Event struct {
 	Stamp    Stamp   `json:"stamp"`

@@ -18,7 +18,6 @@
     {
       "id": 0,
       "name": "Line 1",
-      "layer": -10,
       "stations": [
         {
           "x": -4096.0,
@@ -3302,12 +3301,12 @@
         ]
       ],
       "crossing_station": 2,
-      "loop_speed_kmh": 30
+      "loop_speed_kmh": 30,
+      "elevation_m": -50.0
     },
     {
       "id": 1,
       "name": "Line 2",
-      "layer": -11,
       "stations": [
         {
           "x": -2047.9999999999998,
@@ -6591,12 +6590,12 @@
         ]
       ],
       "crossing_station": 2,
-      "loop_speed_kmh": 30
+      "loop_speed_kmh": 30,
+      "elevation_m": -55.0
     },
     {
       "id": 2,
       "name": "Line 3",
-      "layer": -12,
       "stations": [
         {
           "x": 2047.9999999999989,
@@ -9880,12 +9879,12 @@
         ]
       ],
       "crossing_station": 2,
-      "loop_speed_kmh": 30
+      "loop_speed_kmh": 30,
+      "elevation_m": -60.0
     },
     {
       "id": 3,
       "name": "Orbital Line",
-      "layer": -13,
       "circular": true,
       "stations": [
         {
@@ -51136,10 +51135,10 @@
         ]
       ],
       "crossing_station": -1,
-      "loop_speed_kmh": 300
+      "loop_speed_kmh": 300,
+      "elevation_m": -65.0
     }
   ],
-  "highest_layer": -10,
   "transfers": [
     {
       "id": "X1",

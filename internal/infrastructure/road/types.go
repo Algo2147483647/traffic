@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"traffic/internal/metro"
+	"traffic/internal/infrastructure/metro"
 )
 
 // Vec2 is a point or vector in screen-oriented world coordinates: X increases

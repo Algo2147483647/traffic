@@ -52,7 +52,7 @@ class GeometryTests(unittest.TestCase):
         crossings+=1
         # Only the two fixed-height bridge decks may cross the ground mainline.
         self.assertEqual({a['structure'],b['structure']},{'ground','bridge'},(a['id'],b['id']))
-        self.assertEqual(abs(nodes[a['from']]['elevation']-nodes[b['from']]['elevation']),6.5)
+        self.assertEqual(abs(nodes[a['from']]['elevation']-nodes[b['from']]['elevation']),5)
    self.assertEqual(crossings,4,group)
  def test_compact_geometry_curvature_and_grade(self):
   city=json.loads((Path(__file__).resolve().parents[1]/'example/Map2/road.json').read_text())

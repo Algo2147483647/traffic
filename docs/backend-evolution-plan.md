@@ -69,7 +69,7 @@ change rejects stale tasks; all 36 interchange movements and real taxi service p
 
 The requested road-dynamics and operations slice is implemented in the runtime:
 
-- `internal/road/dynamics.go` separates desired following speed, discrete stopping
+- `internal/road_scheduling/motion/dynamics.go` separates desired following speed, discrete stopping
   envelopes and host safety limits. Road admission starts at rest; connector
   traversal also accelerates instead of assigning cruise speed.
 - Moving clearance includes a speed-dependent 1.5 s headway. Normal changes use

@@ -1,3 +1,5 @@
+> Current height convention: each former level maps to 5 m, without structural thickness. Roads use 0/+5/-5 m; metro uses -50/-55/-60/-65 m. Settings uses editable elevations and metre-range slices. See [current architecture review](architecture-review-2026-11-15.md).
+
 # Map 3 - Radial grid and orbital metro
 
 Map 3 is an independent preset derived from Map 1. Map 1 and Map 2 are unchanged.
@@ -12,7 +14,7 @@ positive X east/right and positive Y south/down. Both axes use the same scale.
 - Local streets: 500 m spacing, one lane per direction, strictly inside radius
   2,000 m. Four diagonal junctions now connect the grid to the inner ring. The
   central square at x/y = +/-500 m is connected to the surrounding grid. At each
-  axis crossing it descends to a -1 layer, -6.5 m tunnel, with 200 m approach ramps
+  axis crossing it descends to a -5 m tunnel, with 200 m approach ramps
   and a 100 m underground section. These crossings have no graph connection to
   the overlying cloverleaf roads. All added streets retain one lane per direction.
   No dangling local branches remain.
@@ -22,9 +24,9 @@ positive X east/right and positive Y south/down. Both axes use the same scale.
 Three metro axes retain Map 1's 60-degree arrangement. Stations lie at signed
 radii -4,096, -2,048, 0, 2,048 and 4,096 m on each line. Their outer station pairs
 coincide with the six stations of a new radius-4,096 m orbital line. The orbital
-line is on layer -13; the axes are on -10, -11 and -12. The six shared sites
+line is at -65 m; the axes are at -50, -55 and -60 m. The six shared sites
 are real transfer stations (Exchange 1 through Exchange 6). Map 3 reserves levels
--10 and below for metro; its Settings and backend reject shallower metro floors.
+negative elevations for metro; Settings accepts direct metre values.
 
 The orbital line has separate closed clockwise/counterclockwise physical tracks,
 directional block reservations, wrapped station indices and shortest-direction

@@ -18,7 +18,6 @@
     {
       "id": 0,
       "name": "Line 1",
-      "layer": -1,
       "stations": [
         {
           "x": 600,
@@ -3286,7 +3285,8 @@
         ]
       ],
       "crossing_station": 2,
-      "loop_speed_kmh": 30
+      "loop_speed_kmh": 30,
+      "elevation_m": -5.0
     }
   ]
 }

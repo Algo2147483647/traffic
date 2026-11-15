@@ -130,7 +130,7 @@
         "y": 8.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -190,7 +190,7 @@
         "y": 8.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -255,7 +255,7 @@
         "y": 22.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -293,7 +293,7 @@
         "y": 22.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -347,7 +347,7 @@
         "y": 22.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -401,7 +401,7 @@
         "y": 22.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -455,7 +455,7 @@
         "y": 22.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -509,7 +509,7 @@
         "y": 22.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -1150,7 +1150,7 @@
         "y": -8.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -1210,7 +1210,7 @@
         "y": -8.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -1275,7 +1275,7 @@
         "y": -22.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -1313,7 +1313,7 @@
         "y": -22.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -1367,7 +1367,7 @@
         "y": -22.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -1421,7 +1421,7 @@
         "y": -22.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -1475,7 +1475,7 @@
         "y": -22.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -1529,7 +1529,7 @@
         "y": -22.0
       },
       "layer": 1,
-      "elevation": 6.5,
+      "elevation": 5,
       "interchange": "C",
       "traffic_control": {
         "mode": "flow",
@@ -2751,7 +2751,7 @@
         "y": -500
       },
       "layer": -1,
-      "elevation": -6.5,
+      "elevation": -5,
       "interchange": "",
       "traffic_control": {
         "mode": "flow"
@@ -2765,7 +2765,7 @@
         "y": -500
       },
       "layer": -1,
-      "elevation": -6.5,
+      "elevation": -5,
       "interchange": "",
       "traffic_control": {
         "mode": "flow"
@@ -2807,7 +2807,7 @@
         "y": -50
       },
       "layer": -1,
-      "elevation": -6.5,
+      "elevation": -5,
       "interchange": "",
       "traffic_control": {
         "mode": "flow"
@@ -2821,7 +2821,7 @@
         "y": 50
       },
       "layer": -1,
-      "elevation": -6.5,
+      "elevation": -5,
       "interchange": "",
       "traffic_control": {
         "mode": "flow"
@@ -2863,7 +2863,7 @@
         "y": 500
       },
       "layer": -1,
-      "elevation": -6.5,
+      "elevation": -5,
       "interchange": "",
       "traffic_control": {
         "mode": "flow"
@@ -2877,7 +2877,7 @@
         "y": 500
       },
       "layer": -1,
-      "elevation": -6.5,
+      "elevation": -5,
       "interchange": "",
       "traffic_control": {
         "mode": "flow"
@@ -2919,7 +2919,7 @@
         "y": -50
       },
       "layer": -1,
-      "elevation": -6.5,
+      "elevation": -5,
       "interchange": "",
       "traffic_control": {
         "mode": "flow"
@@ -2933,7 +2933,7 @@
         "y": 50
       },
       "layer": -1,
-      "elevation": -6.5,
+      "elevation": -5,
       "interchange": "",
       "traffic_control": {
         "mode": "flow"

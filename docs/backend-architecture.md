@@ -1,227 +1,127 @@
-# Backend architecture and refactoring plan
+# Backend architecture
 
-Status: road/taxi module migration implemented; metro contracts reserved, not a
-running metro simulator. This document distinguishes the target architecture from
-runtime capabilities. Existing Windows executable location and HTTP/UI contracts
-are retained. Project documentation and UI remain English.
+Status: implemented package-boundary refactor, 2026-11-15. This document supersedes earlier architecture inventories. Communications remains a design, with no placeholder package or empty interface added.
 
-## Design constraints
+## Ownership and dependencies
 
-- One simulation owns physical time, tick order, IDs, entity mutation and commits.
-- Traffic and Taxi remain selectable scenarios. A trip uses one transport mode;
-  no road/metro transfer is assumed.
-- A taxi becomes unavailable immediately on accepting a task, before pickup.
-  ToPickup, Boarding, WithPassenger and Alighting are never matching candidates.
-  Candidate filtering and atomic commit both enforce the restriction.
-- Pooling is a future grouped-task contract. Dynamic insertion into an already
-  accepted task is not permitted by the current assignment API.
-- Infrastructure defines legal topology. Policies cannot override legal connectors,
-  speed limits, following constraints, receiving space or clearance intervals.
-- Modules are in-process packages. Experimental dispatch workers and experiment
-  programs use separate processes; there is no distributed clock or state store.
+- `cmd/traffic` only enters `app.Run`. `cmd/experiment` parses experiment inputs and uses the application factory.
+- `app` assembles facilities, algorithms, the world and HTTP transport. It owns startup/shutdown; it does not perform vehicle motion.
+- `simulation` owns the shared clock, the metro runtime lifetime and the shared-demand ledger. Its phase coordinator runs commands/decisions, demand/signals, road motion/arrivals, metro motion and completion accounting in order. Road callbacks execute under the existing command/snapshot lock, preserving atomic boundary snapshots.
+- `foundation.Clock` owns fixed-step accumulation (50 ms), including residual time and reset. Algorithms cannot advance time.
+- `infrastructure/road/interchange` contains the static macro-node/port projection. Actual hierarchical route search and lane expansion are in `road_scheduling/routing`.
+- `infrastructure/metro` loads and validates JSON facilities, physical dimensions, height, closed tracks, transfer connections, chainages and directed section lengths. It never instantiates a train executor or holds occupancy. Operational defaults are plain `operations/metro.Config` data; their validation is pure.
+- `road_scheduling` owns vehicle state, motion, lane/connector reservations, detector reads and signal execution. It receives a live metro admission/observation boundary and a world phase coordinator; it does not import or construct `metro_scheduling`.
+- `road_scheduling/motion` contains pure acceleration/following/braking functions. `road_scheduling/intersections` contains the stateless pressure policy. Runtime detector collection and safety enforcement remain with the road executor.
+- `metro_scheduling` owns trains, platform/block/route occupancy, physical turnback, fleet service execution and boarding. `operations/metro` owns passenger itinerary types, shortest-path computation and timed-transfer transitions, operational settings and detached views.
+- `operations/demand` generates and releases mixed-mode tasks and audits executor identity/count conservation. Road-specific admission is supplied as a callback; rail admission uses the live world-owned metro instance.
+- `operations/taxi` owns order/vehicle lifecycle and acceptance eligibility. `operations/taxi/dispatch` owns matching contracts, policies and proposal validation. Taxi route/admission adapters remain next to physical road agents because they must check real lane storage and arrival state.
+- `algorithms/executor` is the single bounded external process implementation used by both generic algorithms and taxi dispatch. Domain adapters retain their existing JSON contracts and host validation. Desktop secrets are filtered from subprocess environments.
+- `algorithms/experiments` takes an injected session factory and observations; it has no simulation/server/executor imports. `app/experiments.go` supplies the real world adapter. Current exported experiment metrics remain taxi-oriented; this refactor does not invent a complete multi-domain statistics platform.
+- `frontend` embeds HTML/CSS/JS independently; `server` serves it and translates commands. Renderer code never computes traffic physics.
 
-## Package ownership
+Dependency direction:
 
-| Area | Package / source | Responsibility and runtime status |
-|---|---|---|
-| Presentation | internal/server/web | Render immutable snapshots, UI controls; unchanged ownership |
-| API adapter | internal/server | Validate commands, submit to simulation owner, stream state |
-| Foundation | internal/foundation | Single clock value, ordered bounded event journal |
-| Road infrastructure | internal/infrastructure/road | Former internal/model; map reading, lane graph, geometry, validated conflict-free phase generation |
-| Interchange infrastructure | internal/infrastructure/interchange | Macro nodes and ports, lane-sensitive transfer search, full internal path expansion |
-| Metro infrastructure | internal/infrastructure/metro | Station/section graph schema and validation; not enabled in the UI |
-| Road execution | internal/road | Former internal/sim; vehicles, entry/exit, following, lanes, signal/flow control, routing, state owner |
-| Taxi domain | internal/operations/taxi | Config, stop/order DTOs, authoritative eligibility rules |
-| Taxi execution adapter | internal/road/taxi.go | Translate operational tasks into shared road agents and handle real arrival events |
-| Demand | internal/operations/demand | Mutually exclusive car/taxi/metro shares and validation; mixed selection is not wired into current separate modes |
-| Metro execution | internal/metro | Timetable, interlocking, running contracts and capacity guard; no train loop yet |
-| Algorithm runtime | internal/dispatch | Existing native registry and bounded external JSON worker execution |
-| Experiments | internal/experiments, cmd/taxi-lab | Isolated CLI runs, paired demand seeds and JSON/CSV export |
-
-The historical Go package identifiers `model` and `sim` are retained inside their
-new directories to reduce migration risk; imports explicitly identify their new
-ownership. Old source directories are removed rather than duplicated. Existing
-configuration files and the frontend protocol remain compatible.
-
-## State and execution sequence
-
-The road Simulation is the aggregate owner under a single mutex. Operations may
-propose tasks but do not own a second copy of vehicle position or clock. One physical
-substep handles: pending dispatch commit; walking/turn events; lane-change progress;
-signal evolution; time advance; lane preparation; constrained road motion; arrival;
-taxi service/demand maintenance; tick increment. Taxi time is integrated in bounded
-0.05-second physical steps. External decision waits hold simulation time without
-holding the mutex across worker execution.
-
-The foundation journal records order creation, assignment, boarding, service,
-completion, cancellation and epoch invalidation with a monotonic sequence. Same-time
-events therefore have deterministic ordering within a run. GET /api/events returns
-a detached copy of the latest 2048 events; history is not retransmitted in each
-high-frequency frame. This is an audit stream, not an exact arbitrary-state restore
-checkpoint. Paired seeded reruns remain supported by taxi-lab. Full checkpoint and
-external-policy state replay remain later work.
-
-Entity IDs remain allocated by the aggregate owner. Retiring drivers finish accepted
-service before removal. Live fleet/demand changes invalidate pending proposals but
-preserve time, orders and existing tasks. Map/mode changes start a fresh scenario.
-
-## Road and interchange graphs
-
-The detailed graph remains authoritative for movement and legality. Each interchange
-also has one macro node with directional entry/exit ports. A macro node owns its
-internal road-ID set; the original micrograph remains available for path expansion.
-The city API exposes this structure as macro_interchanges. Tests cover eight central
-ports and six ports for each three-arm trumpet.
-
-Runtime routing now uses a two-level search implemented in
-`internal/infrastructure/interchange/routing.go`. The outer Dijkstra search treats
-an interchange as a directional macro node with lane-specific ingress/egress states.
-On reaching an ingress, a local Dijkstra search computes legal transfers through
-that interchange only. It stops at its exits or at a destination inside the node.
-Every macro arc retains its exact internal predecessor path and accumulated cost.
-Backtracking expands the selected arcs into actual directed roads with distinct
-entry and exit lanes. Vehicles follow those roads through the ordinary turn,
-merge, signal, lane-change and storage checks.
-
-Macro transfer costs include the exit road and exclude the already-entered source
-road, so adjacent transfers do not double-charge a connecting link. A fresh weight
-snapshot incorporates current congestion and the selected RouteCost policy.
-Only topology is cached per graph; changing maps rebuilds it. Internal transfer
-paths are query-local. This provides real hierarchical routing, without claiming
-that lazy transfer recomputation always improves total wall-clock performance.
-
-Both ordinary demand and taxi pickup, delivery, cruising and congestion rerouting
-use this planner. There is no road-only fallback in vehicle task planning. The
-host first seeks a connector-continuous lane path; if unavailable, it permits
-physical lane preparation only on roads with enough usable length (including the
-current vehicle position on its first road). This preserves the preference for
-avoiding lane changes; it is not an optimum over every possible lane-changing
-trajectory. Every receiving lane is explicit and every proposed connector is legal.
-The executor still waits for safe lane-change gaps and downstream storage.
-
-Queries support endpoints inside interchanges, direct same-road travel, nonempty
-same-road return cycles and exclusion of the first blocked downstream road.
-`interchange.Route` includes expanded Steps, macro Leg index ranges, total cost and
-outer/internal search counts. Snapshot people expose `route_entry_lanes` and
-`route_exit_lanes` aligned with the existing `route` road-ID sequence. Lane indices
-remain zero based. A taxi's final stop alignment is handled by the stop controller.
-The old Graph.RouteBetweenWays utility remains available for infrastructure tests;
-it is no longer the runtime fallback.
-
-Verification compares 826 hierarchy queries with an uncontracted lane-graph search
-for identical reachability/cost, including internal endpoints, blocked branches,
-cycles and custom weights. Physical taxi tests ask the planner for all 36 catalogue
-movements and then drive every advertised road. A separate dispatched order checks
-real pickup through C/N and delivery through E/S, including ramp and deck travel.
-See [Hierarchical routing](hierarchical-routing.md) for the contract and acceptance
-checks.
-
-Geometry and signal-plan generators are separate configuration-stage plugins.
-Their output is revalidated through BuildGraph. Generated internal roads use the
-same vehicle engine and signal/flow controller as the rest of the map.
-
-## Algorithm extension contracts
-
-### Road policy profiles
-
-Register a versioned per-simulation factory with RegisterStrategies(id, version,
-factory). Select it through `-road-policy ID -road-parameters '{...}'` on the backend.
-The factory receives a copied finite numeric parameter map. A nil hook uses the
-existing baseline. Register factories during program bootstrap, not during a tick.
-
-| Strategies hook | Decision | Host enforcement |
-|---|---|---|
-| RouteCost | Per-directed-road objective for lane-aware shortest-path search | Positive finite cost; legal graph search remains mandatory |
-| DesiredSpeed | Desired running speed | Clamped to the road/vehicle limit, then following/storage constraints apply |
-| LaneChoice | Optional passing-lane choice | Adjacent lane, bounds and laneChangeSafe; mandatory route preparation remains enforced |
-| PhaseScores | Priorities over prevalidated phases | Finite nonnegative values; green bounds, maximum-red handling and clearance remain in the controller |
-| FlowPermit | Additional unsignalized/merge admission veto | Cannot grant an illegal lane connector or override downstream reservations |
-| TaxiCruise | Idle supply's next stop | Only an existing accessible stop, followed by normal route planning |
-| DemandDelay | Next arrival interval | Finite interval >= 0.05 seconds; zero configured frequency still disables new demand |
-
-These are native code strategy interfaces, not arbitrary executable callbacks on
-every physical tick. Register a profile package and import it in the backend's
-bootstrap. The factory returns fresh policy state for each simulation. Native hooks
-are trusted/cooperative and must return promptly; hostile-code isolation is not
-claimed. Full replacement of the collision solver requires preserving the execution
-invariants and its tests, rather than bypassing them with a speed policy.
-
-Example:
-
-```go
-package research
-import sim "traffic/internal/road"
-func init() {
-    err := sim.RegisterStrategies("research.distance", "1", func(parameters map[string]float64) sim.Strategies {
-        return sim.Strategies{RouteCost: func(r sim.RoadCost) float64 { return r.Length }}
-    })
-    if err != nil { panic(err) }
-}
+```text
+cmd -> app -> server + simulation
+simulation -> road_scheduling + metro_scheduling + operations + foundation
+scheduling -> infrastructure + operations + algorithms + foundation
+operations -> algorithms + foundation
+infrastructure -> declarative operation config + algorithms + foundation
+algorithms/experiments -> injected session contract (no world dependency)
 ```
 
-### Infrastructure planning
+`app/architecture_test.go` enforces the important import boundaries. No infrastructure or operational package can import a scheduler, world or server. Schedulers cannot import each other or the world.
 
-Use model.RegisterPlanner(id, fn) from traffic/internal/infrastructure/road.
-A planner receives a JSON-detached CityConfig and returns a proposed CityConfig.
-Select `geometry_algorithm` and/or `phase_algorithm` in the map JSON. Geometry runs
-first, phase generation second, then the ordinary full graph validation runs.
-Unknown IDs and invalid outputs fail map loading; planners cannot mutate the caller's
-input. Existing Python cloverleaf/trumpet generators remain reproducible authoring
-tools and their generated maps enter through the same validator.
+## Preserved contracts
 
-### Taxi matching and task routing
+- JSON fields and HTTP/WebSocket commands remain compatible, including metro station details, complete passenger route overlays and the floating fleet window.
+- A taxi is unavailable immediately after accepting an order, throughout pickup and dropoff, until completion/cancellation safely releases it. Pooling is not enabled.
+- Live demand/fleet changes preserve accepted orders and passenger identities. Explicit reset/map change retains its existing reset semantics.
+- Road/metro coordinates are metres; old level conversion remains 5 m. The renderer uses metre height slices and uniform X/Y scaling.
+- Terminal direction locks, track occupancy, lane reservations and host result validation remain authoritative.
+- The packaged executable remains `desktop/dist/win-unpacked/Meridian Traffic.exe`.
 
-Keep the dispatch.Policy/Factory interface and the documented one-shot external
-JSON protocol. Matching returns pairs, not physical positions. The operations/taxi
-module owns CanAssign and Eligible; commit rechecks them even if a plugin forges a
-candidate or returns a stale response. Busy vehicles cannot accept another order.
-Taxi task routing and idle repositioning call the shared road graph; there is no
-second undirected taxi router. Current standard service remains one order per task.
+## Actual production source tree
 
-### Metro contracts
+```text
+cmd/experiment/main.go
+cmd/traffic/main.go
+frontend/assets.go
+internal/algorithms/executor/process.go
+internal/algorithms/executor/process_unix.go
+internal/algorithms/executor/process_windows.go
+internal/algorithms/experiments/run.go
+internal/algorithms/host.go
+internal/app/bootstrap.go
+internal/app/experiments.go
+internal/foundation/clock.go
+internal/foundation/geometry/pose.go
+internal/foundation/kernel.go
+internal/foundation/runtime.go
+internal/infrastructure/metro/circular.go
+internal/infrastructure/metro/layout.go
+internal/infrastructure/road/crossroads.go
+internal/infrastructure/road/geometry.go
+internal/infrastructure/road/graph.go
+internal/infrastructure/road/interchange/graph.go
+internal/infrastructure/road/planners.go
+internal/infrastructure/road/presets.go
+internal/infrastructure/road/signal_plan.go
+internal/infrastructure/road/traffic.go
+internal/infrastructure/road/types.go
+internal/metro_scheduling/controls.go
+internal/metro_scheduling/network.go
+internal/metro_scheduling/network_assembly.go
+internal/metro_scheduling/runtime.go
+internal/metro_scheduling/sections.go
+internal/metro_scheduling/service.go
+internal/metro_scheduling/station_details.go
+internal/metro_scheduling/transfers.go
+internal/metro_scheduling/types.go
+internal/operations/demand/arrivals.go
+internal/operations/demand/dispatch.go
+internal/operations/demand/modes.go
+internal/operations/demand/stream.go
+internal/operations/metro/config.go
+internal/operations/metro/routing.go
+internal/operations/metro/transfers.go
+internal/operations/metro/views.go
+internal/operations/taxi/config.go
+internal/operations/taxi/dispatch/dispatch.go
+internal/operations/taxi/dispatch/worker.go
+internal/operations/taxi/domain.go
+internal/operations/taxi/lifecycle.go
+internal/operations/taxi/vehicle.go
+internal/road_scheduling/algorithm_extensions.go
+internal/road_scheduling/algorithm_runtime.go
+internal/road_scheduling/coupling.go
+internal/road_scheduling/flow_reservations.go
+internal/road_scheduling/intersections/max_pressure.go
+internal/road_scheduling/kernel.go
+internal/road_scheduling/lane_changes.go
+internal/road_scheduling/lane_entry.go
+internal/road_scheduling/mixed.go
+internal/road_scheduling/motion/dynamics.go
+internal/road_scheduling/parallel.go
+internal/road_scheduling/phases.go
+internal/road_scheduling/policies.go
+internal/road_scheduling/routing.go
+internal/road_scheduling/routing/routing.go
+internal/road_scheduling/signal_types.go
+internal/road_scheduling/signals.go
+internal/road_scheduling/simulation.go
+internal/road_scheduling/taxi.go
+internal/server/server.go
+internal/simulation/phases.go
+internal/simulation/world.go
+```
 
-Timetable.Schedule proposes departures, Interlocking.Permit authorizes sections,
-and Operation.Advance proposes train state. Infrastructure validation and Board's
-capacity clamp are available. The current release does not advertise running trains,
-metro signals, timetable execution or metro demand in Settings. Positive metro share
-is rejected when the executor is unavailable. These interfaces reserve the requested
-module boundary without pretending that a railway simulator already exists.
+## Intended extensions, design only
 
-GET /api/algorithms returns registered road profiles and dispatch algorithms. Existing
-GET /api/dispatch/algorithms remains compatible. Geometry planner IDs are selected
-in map configuration, not from the interactive dispatch selector.
+Communications infrastructure belongs in `infrastructure/communications`, with runtime in `communications_scheduling` and application traffic in `operations/communications`. Shared terrain/materials belong in `infrastructure/environment`. See `communications-research-design.md`. These folders are not created until they contain real implementations.
 
-## Refactoring sequence and acceptance
+The earlier recommended filenames are responsibility boundaries, not a requirement to create empty files. Fully physical depot tracks/shunting, durable checkpoint/replay, general multi-domain experiment metrics and communications physics are not claimed by this refactor. Current metro depots are logical storage with safe platform admission and real terminal-circuit turnback.
 
-1. Inventory ownership and keep existing behavior/DTO names as migration baseline.
-2. Move graph/model code to infrastructure/road and vehicle execution to road;
-   update imports, relative fixture paths and documentation links. Do not duplicate
-   the old directories or create another EXE location.
-3. Extract clock/journal and taxi business records/eligibility into their owners.
-4. Add directional macro-port representation and code-based strategy registries;
-   keep safety validation outside policy hooks.
-5. Reserve typed metro and mode-share boundaries; keep unsupported features disabled.
-6. Run original model/signal/traffic/taxi tests, new extension/output validation
-   tests, busy-taxi rejection, port tests and journal ordering checks.
-7. Verify real desktop mode switching, live fleet/demand changes, experimental
-   Python assignment, pickup/dropoff and the existing 36 interchange movements.
-8. Rebuild and smoke-test desktop/dist/win-unpacked/Meridian Traffic.exe in place.
+## Validation
 
-## Implementation audit
-
-The source-level [implementation audit and ordered backlog](backend-implementation-audit.md)
-identifies running modules, partial strategy hooks and unwired metro/demand contracts,
-including the physical scale issue in Map 2. It supersedes any interpretation that
-all proposed algorithm interfaces or transport modes are already implemented.
-
-## Remaining target capabilities
-
-This is a behavior-preserving modular backend refactor, not a completed multimodal
-simulator. Train execution, grouped pooling, geographic demand/relocation, complete
-checkpoint restore, persistent macro transfer caching and a GUI experiment-job manager
-remain separate implementations. Their interfaces must retain the no-reassignment
-rule until a versioned grouped-task proposal/validator is explicitly introduced.
-
-## Next delivery stages
-
-The [backend evolution plan](backend-evolution-plan.md) supersedes the earlier backlog order with runnable delivery gates for general workers, mixed demand and metro.
+The final release runs Go tests/vet, desktop backend/frontend-helper tests, packaged fleet and transfer smoke scenarios, and executable runtime identity checks. Results are recorded in `refactor-validation-2026-11-15.md` after execution.

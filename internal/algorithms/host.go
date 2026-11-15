@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"sync"
 	"time"
+	"traffic/internal/algorithms/executor"
 	"traffic/internal/foundation"
 )
 
@@ -108,17 +108,6 @@ func LoadDirectory(dir string) error {
 	return nil
 }
 
-type bounded struct {
-	bytes.Buffer
-	limit int
-}
-
-func (b *bounded) Write(p []byte) (int, error) {
-	if b.Len()+len(p) > b.limit {
-		return 0, fmt.Errorf("output limit exceeded")
-	}
-	return b.Buffer.Write(p)
-}
 func Decode(data []byte, v any) error {
 	d := json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
@@ -136,30 +125,16 @@ func Invoke(parent context.Context, in Request) (Response, error) {
 	if !ok || m.Capability != in.Capability {
 		return Response{}, fmt.Errorf("algorithm unavailable")
 	}
-	ctx, cancel := context.WithTimeout(parent, time.Duration(m.Timeout)*time.Millisecond)
-	defer cancel()
 	data, e := json.Marshal(in)
-	if e != nil || len(data) > 16<<20 {
-		return Response{}, fmt.Errorf("input limit exceeded")
+	if e != nil {
+		return Response{}, e
 	}
-	cmd := exec.CommandContext(ctx, m.Command[0], m.Command[1:]...)
-	cmd.Dir = m.Directory
-	cmd.Stdin = bytes.NewReader(append(data, '\n'))
-	cmd.WaitDelay = 250 * time.Millisecond
-	configureProcess(cmd)
-	for _, v := range os.Environ() {
-		if !bytes.HasPrefix([]byte(v), []byte("TRAFFIC_DESKTOP_TOKEN=")) {
-			cmd.Env = append(cmd.Env, v)
-		}
-	}
-	out, logs := &bounded{limit: 4 << 20}, &bounded{limit: 16 << 10}
-	cmd.Stdout = out
-	cmd.Stderr = logs
-	if e = cmd.Run(); e != nil {
-		return Response{}, fmt.Errorf("worker: %w: %.400s", e, logs.String())
+	output, e := executor.Run(parent, executor.Process{Command: m.Command, Directory: m.Directory, Timeout: time.Duration(m.Timeout) * time.Millisecond, OutputLimit: 4 << 20}, data)
+	if e != nil {
+		return Response{}, e
 	}
 	var r Response
-	if e = Decode(out.Bytes(), &r); e != nil {
+	if e = Decode(output, &r); e != nil {
 		return r, e
 	}
 	if r.Version != in.Version || r.Algorithm != in.Algorithm || r.AlgorithmVersion != in.AlgorithmVersion || r.Capability != in.Capability || r.Stamp != in.Stamp || r.Tick != in.Tick || r.Request != in.Request {

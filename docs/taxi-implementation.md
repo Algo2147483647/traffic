@@ -43,7 +43,7 @@ current physical snapshot, retained order timestamps and cumulative counters.
 
 ## Dispatch extension
 
-The native registry in `internal/dispatch` exposes a Factory/Policy.Decide interface
+The native registry in `internal/operations/taxi/dispatch` exposes a Factory/Policy.Decide interface
 with detached input values. Built-ins: nearest ETA (oldest-order priority), FIFO,
 greedy global ETA, Hungarian rectangular assignment, batch Hungarian (at least
 five seconds), and a parameterized ETA/wait/idle/income score. No geographic balance
@@ -79,7 +79,7 @@ or taskkill /T clean up ordinary descendants; this is not a malicious-code sandb
 
 ## Experiments
 
-`go run ./cmd/taxi-lab` runs in a separate program from the desktop and accepts map,
+`go run ./cmd/experiment` runs in a separate program from the desktop and accepts map,
 algorithms, paired seeds, duration, fleet, demand and output prefix. It writes JSON
 and CSV with configuration, map/engine hashes, cohort counts, open orders at the
 horizon, waits, solver failures and fleet statistics. Independent demand and cruise
@@ -88,7 +88,7 @@ random streams keep assignments from changing the generated OD sequence.
 A Windows binary can be built with:
 
 ```powershell
-go build -o desktop/runtime/taxi-lab.exe ./cmd/taxi-lab
+go build -o desktop/runtime/taxi-lab.exe ./cmd/experiment
 ```
 
 The CLI is the experiment entry point in this release; a GUI experiment-job manager,

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"embed"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -10,20 +9,18 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"traffic/frontend"
 
 	"traffic/internal/algorithms"
-	"traffic/internal/dispatch"
 	"traffic/internal/foundation"
 	model "traffic/internal/infrastructure/road"
-	"traffic/internal/metro"
 	"traffic/internal/operations/demand"
-	sim "traffic/internal/road"
+	"traffic/internal/operations/metro"
+	"traffic/internal/operations/taxi/dispatch"
+	sim "traffic/internal/simulation"
 )
 
-//go:embed web/*
-var webFiles embed.FS
-
-const maximumPopulation = 10000
+var webFiles = frontend.Files
 
 type Server struct {
 	simulation *sim.Simulation
@@ -119,7 +116,7 @@ func newServer(simulation *sim.Simulation, logger *slog.Logger, current string, 
 	mux.HandleFunc("GET /api/snapshot", server.snapshot)
 	mux.HandleFunc("GET /api/stream", server.stream)
 	mux.HandleFunc("POST /api/control", server.control)
-	static, err := fs.Sub(webFiles, "web")
+	static, err := fs.Sub(webFiles, ".")
 	if err != nil {
 		panic(err)
 	}
@@ -300,38 +297,20 @@ func (s *Server) control(w http.ResponseWriter, r *http.Request) {
 		s.simulation.SetPaused(false)
 	case "step":
 		s.simulation.Step(request.Delta)
-	case "reset":
-		if request.Population < 0 || request.Population > maximumPopulation {
-			s.writeError(w, http.StatusBadRequest, "population must be 0 or in [1, 10000]")
+	case "reset", "set_time_scale", "set_load", "set_spacing":
+		c := sim.Command{Kind: request.Action, Population: request.Population, MaxPeople: request.MaxPeople}
+		switch request.Action {
+		case "set_time_scale":
+			c.Value = request.TimeScale
+		case "set_load":
+			c.Value = request.SpawnRate
+		case "set_spacing":
+			c.Value = request.SafeGap
+		}
+		if err := s.simulation.Execute(c); err != nil {
+			s.writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		s.simulation.Reset(request.Population)
-	case "set_time_scale":
-		if request.TimeScale <= 0 || request.TimeScale > 10 {
-			s.writeError(w, http.StatusBadRequest, "time_scale must be in (0, 10]")
-			return
-		}
-		s.simulation.SetTimeScale(request.TimeScale)
-	case "set_load":
-		if request.Population < 1 || request.Population > maximumPopulation {
-			s.writeError(w, http.StatusBadRequest, "population must be in [1, 10000]")
-			return
-		}
-		if request.MaxPeople < request.Population || request.MaxPeople > maximumPopulation {
-			s.writeError(w, http.StatusBadRequest, "max_population must be between population and 10000")
-			return
-		}
-		if request.SpawnRate < 0 || request.SpawnRate > 100 {
-			s.writeError(w, http.StatusBadRequest, "spawn_rate_per_second must be in [0, 100]")
-			return
-		}
-		s.simulation.SetLoad(request.Population, request.SpawnRate, request.MaxPeople)
-	case "set_spacing":
-		if request.SafeGap < 2 || request.SafeGap > 200 {
-			s.writeError(w, http.StatusBadRequest, "safe_gap must be in [2, 200]")
-			return
-		}
-		s.simulation.SetSpacing(request.SafeGap)
 	case "set_preset":
 		s.presetMu.RLock()
 		graph, ok := s.presets[request.PresetID]

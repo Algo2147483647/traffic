@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Live lane-level directed-graph traffic simulation for Meridian City.">
+  <title>Meridian City Traffic Field</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="dashboard">
+    <canvas id="city-canvas" tabindex="0" aria-label="Interactive lane-level map of Meridian City traffic"></canvas>
+
+    <button id="settings-toggle" class="settings-toggle quiet" aria-label="Settings" aria-expanded="false" aria-controls="settings-panel" title="Settings"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><polygon points="19.00,12.00 20.83,13.76 20.31,15.44 17.82,15.89 16.95,16.95 17.00,19.48 15.44,20.31 13.37,18.87 12.00,19.00 10.24,20.83 8.56,20.31 8.11,17.82 7.05,16.95 4.52,17.00 3.69,15.44 5.13,13.37 5.00,12.00 3.17,10.24 3.69,8.56 6.18,8.11 7.05,7.05 7.00,4.52 8.56,3.69 10.63,5.13 12.00,5.00 13.76,3.17 15.44,3.69 15.89,6.18 16.95,7.05 19.48,7.00 20.31,8.56 18.87,10.63" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
+    <button id="rail-service-toggle" class="quiet" aria-label="Rail service planning" title="Rail service planning">▤</button>
+    <section id="rail-service-panel" class="glass" role="dialog" aria-label="Rail service planning" hidden>
+      <div id="rail-service-drag" class="settings-titlebar"><h2>Rail service planning</h2><button id="rail-service-close" class="quiet" aria-label="Close rail service planning">×</button></div>
+      <div class="rail-service-body">
+        <label>Planner <select id="rail-service-algorithm"></select></label>
+        <label>Target interval per direction (s) <input id="rail-service-headway" type="number" step="any" value="180"></label>
+        <button id="rail-service-apply">Plan and apply</button><p id="rail-service-feedback" role="status"></p>
+        <p>Fleet size and feasible intervals are calculated from running time, dwell, turnback and track capacity. Occupied platforms or blocks delay departure. Existing passengers keep their journeys.</p>
+        <div id="rail-service-summary"></div>
+        <label>Line <select id="rail-service-line"></select></label>
+        <div id="rail-service-trips"></div>
+      </div>
+    </section>
+    <header id="settings-panel" class="glass top-overlay" hidden role="dialog" aria-label="Simulation settings">
+      <div id="settings-drag" class="settings-titlebar" tabindex="0" aria-label="Move settings window with arrow keys">
+        <h2>Settings</h2><div class="settings-window-actions"><button id="settings-maximize" class="quiet" aria-label="Maximize settings" title="Maximize settings">□</button><button id="settings-close" class="quiet" aria-label="Close settings">×</button></div>
+      </div>
+      <div class="settings-body">
+      <div class="settings-map-grid">
+        <label class="select-control preset-control">Map<select id="map-preset" aria-label="Map preset" disabled><option>Loading maps…</option></select></label>
+        <label class="select-control">Demand mix<select id="simulation-mode"><option value="traffic">Traffic</option><option value="taxi">Taxi</option><option value="mixed">Road + Taxi + Metro</option></select></label>
+        <label class="select-control">Height view<select id="layer-filter"><option value="all">All elevations</option><option value="slice">Height slice</option></select></label>
+        <label class="select-control">From (m)<input id="height-min" type="number" step="any" value="-5" disabled></label>
+        <label class="select-control">To (m)<input id="height-max" type="number" step="any" value="5" disabled></label><p id="height-feedback" role="status"></p>
+      </div>
+      <div class="simulation-controls" aria-label="Simulation controls">
+        <button id="pause-button" type="button">Pause</button><button id="step-button" type="button" class="quiet">Step</button><button id="reset-button" type="button" class="quiet">Reset</button>
+        <label class="select-control">Rate<input id="time-scale" type="number" step="any" value="1"></label>
+      </div>
+      <div class="settings-view-controls">
+        <button id="zoom-out-button" type="button" class="quiet icon-button" aria-label="Zoom out">−</button><span id="view-scale" class="view-scale">100%</span><button id="zoom-in-button" type="button" class="quiet icon-button" aria-label="Zoom in">+</button><button id="fit-button" type="button" class="quiet">Fit map</button><button id="fullscreen-button" type="button" class="quiet">Full screen</button>
+        <label class="coordinate-control"><input id="show-coordinates" type="checkbox" checked> Show coordinates and scale</label>
+      </div>
+      <label class="range-control"><span>Walking speed <b id="walk-speed-value">1.4 m/s</b></span><input id="walk-speed-control" type="number" step="0.1" value="1.4"></label>
+      <section id="metro-settings"><h3>Metro operation</h3>
+<label><input id="metro-enabled" type="checkbox" checked> Run metro</label>
+<input id="metro-headway" type="hidden" value="180">
+<label class="select-control">Passengers per minute<input id="metro-demand" type="number" value="12"></label>
+<label class="select-control">Cars per train<input id="metro-cars" type="number" value="6"></label>
+<label class="select-control">Maximum speed (km/h)<input id="metro-speed" type="number" value="300"></label>
+<p>One dot = one passenger. Car counts change at an empty terminal.</p>
+<label class="select-control">Train capacity<input id="metro-capacity" type="number" value="120"></label>
+<label class="select-control">Minimum dwell (s)<input id="metro-dwell" type="number" value="20"></label>
+<div id="metro-levels"></div><button id="metro-apply">Apply metro settings</button><p id="metro-summary"></p><div id="metro-trains"></div>
+</section>
+<section id="shared-demand-settings">
+        <h3>Shared travel demand</h3>
+        <label class="select-control">Trips per minute<input id="shared-rate" type="number" step="0.5" value="2"></label>
+        <label class="range-control"><span>Taxi share <b id="shared-share-value">50%</b></span><input id="shared-share" type="number" step="5" value="50"></label>
+        <label class="select-control">Metro share (%)<input id="shared-metro" type="number" step="5" value="0"></label>
+        <button id="shared-apply">Apply demand mix</button><p id="shared-summary" role="status"></p>
+      </section>
+      <section><h3>Experimental algorithms</h3>
+        <label class="select-control">Demand timing and destinations<select id="demand-algorithm"><option value="native">Native</option></select></label>
+<label class="select-control">Empty taxi supply<select id="supply-algorithm"><option value="native">Native</option></select></label>
+<label class="select-control">Road motion<select id="motion-algorithm"><option value="native">Native</option></select></label>
+<label class="select-control">Metro operation<select id="metro-algorithm"><option value="native">Native</option></select></label>
+<label class="select-control">Route planner<select id="route-algorithm"><option value="native">Native</option></select></label>
+        <label class="select-control">Signal scheduler<select id="signal-algorithm"><option value="native">Native</option></select></label>
+        <label class="select-control">Parameters (JSON)<textarea id="road-algorithm-parameters">{}</textarea></label>
+        <button id="road-algorithm-apply">Apply algorithms</button><p id="road-algorithm-status" role="status"></p>
+      </section>
+      <section id="taxi-settings" hidden>
+        <div class="settings-section-heading"><h3>Taxi service</h3><span id="taxi-fleet-status"></span></div>
+        <div class="taxi-live-fields">
+          <label for="taxi-fleet">Drivers</label><input id="taxi-fleet" type="number" step="1" value="32" aria-label="Driver count">
+          <input hidden id="taxi-fleet-range" type="number" step="1" value="32" aria-label="Driver count slider">
+          <label for="taxi-demand">Shared trips per minute</label><input id="taxi-demand" type="number" step="0.5" value="2" aria-label="Order frequency">
+          <input hidden id="taxi-demand-range" type="number" step="0.5" value="2" aria-label="Order frequency slider">
+        </div>
+        <button id="taxi-load-apply" class="apply-load">Apply live</button><p id="taxi-load-feedback" role="status"></p>
+        <section class="taxi-advanced"><h3>Dispatch &amp; experiment</h3>
+          <label class="select-control">Algorithm<select id="taxi-algorithm"><option value="nearest">Nearest ETA</option></select></label>
+          <div class="taxi-fields"><label>Seed<input id="taxi-seed" type="number" value="71429"></label><label>Dispatch interval (s)<input id="taxi-interval" type="number" value="2"></label></div>
+          <label class="range-control">Algorithm parameters (JSON)<textarea id="taxi-parameters" rows="3">{"wait_weight":0.25}</textarea></label>
+          <div class="settings-action-row"><button id="taxi-apply">Apply taxi settings</button><button id="taxi-export" class="quiet">Export run</button></div>
+        </section>
+        <p id="taxi-error" role="status"></p>
+      </section>
+      <section id="traffic-settings" class="glass load-overlay">
+        <div class="panel-heading"><div><h2>Traffic demand</h2></div><span id="load-current">—</span></div>
+        <label class="range-control"><span>Active people <b id="population-value">320</b></span><input id="population-control" type="number" step="20" value="320"></label>
+        <label class="range-control"><span>New people / min <b id="spawn-rate-value">0/min</b></span><input id="spawn-rate-control" type="number" step="1" value="0"></label>
+        <label class="range-control"><span>People limit <b id="max-population-value">1000</b></span><input id="max-population-control" type="number" step="100" value="1000"></label>
+        <label class="range-control"><span>Following clearance <b id="safe-gap-value">2.5 m</b></span><input id="safe-gap-control" type="number" step="0.5" value="2.5"></label>
+        <button id="apply-load-button" type="button" class="apply-load">Apply traffic load</button>
+      </section>
+      <p id="settings-feedback" role="status"></p><div class="settings-status"><div class="connection" role="status" aria-live="polite"><span class="connection-dot"></span><span id="connection-label">Connecting</span></div><div class="frequency-block" title="Measured simulation updates per second"><strong id="compute-rate">— Hz</strong></div></div>
+      </div>
+      <button id="settings-resize" aria-label="Resize settings window with arrow keys" title="Resize settings" class="quiet">◢</button>
+    </header>
+
+    <section class="glass stats-overlay" aria-label="Live traffic statistics">
+      <div class="stat-primary"><div><strong id="people-count">—</strong><span id="population-label">population</span></div><strong id="sim-time" aria-label="Simulation time">00:00.0</strong></div>
+      <div class="stat-row"><span><i class="dot driving"></i>Driving <b id="driving-count">—</b></span><span><i class="dot waiting"></i>Waiting <b id="waiting-count">—</b></span><span><i class="dot walking"></i>Walking <b id="walking-count">—</b></span></div>
+      <div class="stat-meta"><span><b id="average-speed">—</b> km/h avg</span><span><b id="way-count">—</b> ways / <b id="intersection-count">—</b> signals / <b id="lane-count">—</b> lanes</span></div>
+      <div class="efficiency-row"><span><b id="signal-queue">—</b>signal queue</span><span><b id="throughput">—</b>trips/min</span><span><b id="mean-delay">—</b>mean delay</span></div>
+      <div id="taxi-stats" hidden><div><span>Orders</span><b id="taxi-created">0</b></div><div><span>Picked up</span><b id="taxi-picked">0</b></div><div><span>Completed</span><b id="taxi-completed">0</b></div><div><span>Cancelled</span><b id="taxi-cancelled">0</b></div><div title="Mean wait among picked-up orders"><span>Mean wait</span><b id="taxi-wait">0 s</b></div><div><span>Solver</span><b id="taxi-solver">0 ms</b></div></div>
+    </section>
+
+    <aside class="right-stack">
+      <button id="inspector-toggle" class="quiet" aria-label="Collapse details" aria-expanded="true" title="Collapse details">›</button>
+
+
+      <section class="glass inspector-overlay">
+        <div id="empty-inspector" class="empty-state">Select a vehicle or junction</div>
+        <div id="metro-station-inspector" hidden><h2 id="metro-station-name"></h2><p id="metro-station-count"></p><div id="metro-platforms"></div><h3>Passengers at this station</h3><label>Passenger <select id="metro-passenger-select"></select></label><p id="metro-passenger-state"></p><div id="metro-route-legend" hidden><span class="route-done">Completed</span><span class="route-current">Current</span><span class="route-next">Upcoming · dashed</span><button id="metro-route-fit" class="quiet">Fit route</button></div><ol id="metro-passenger-path"></ol><p class="metro-estimate-note">Arrival estimates use simulation time and scheduled stops. Traffic control and boarding may cause delays.</p></div>
+        <div id="order-inspector" hidden><div class="panel-heading"><h2 id="order-title">Order</h2><span id="order-state"></span></div><dl id="order-facts" class="person-facts"></dl></div>
+        <div id="person-inspector" hidden>
+          <div class="panel-heading"><div><p>PERSON / VEHICLE</p><h2 id="person-id">P-000</h2></div><span id="person-state">DRIVING</span></div>
+          <dl class="person-facts"><div><dt>Way / lane</dt><dd id="person-way">—</dd></div><div><dt>Reference</dt><dd id="person-reference">—</dd></div><div><dt>World</dt><dd id="person-position">—</dd></div><div><dt>Origin</dt><dd id="person-origin">—</dd></div><div><dt>Destination</dt><dd id="person-destination">—</dd></div><div><dt>Route</dt><dd id="person-route">—</dd></div></dl>
+          <p id="taxi-person-detail"></p>
+          <p class="matrix-label">LOCAL TRANSFORM</p><div id="person-matrix" class="matrix"></div>
+        </div>
+        <div id="interchange-inspector" hidden>
+          <div class="panel-heading"><h2 id="interchange-name">Interchange</h2></div>
+          <p id="interchange-summary"></p>
+          <label class="select-control">Movement<select id="interchange-movement" aria-label="Interchange movement"></select></label>
+          <canvas id="interchange-canvas" width="760" height="760" aria-label="Interchange route overview"></canvas>
+          <p id="interchange-route-detail"></p>
+        </div>
+        <div id="signal-inspector" hidden>
+          <div class="panel-heading"><div><h2 id="signal-name">Intersection A</h2></div><span id="signal-countdown">0.0s</span></div>
+          <div class="controller-card"><div><span>Controller</span><strong id="signal-controller">—</strong></div><div><span>Decision</span><strong id="signal-decision">—</strong></div><div><span>Green target</span><strong id="signal-green-target">—</strong></div><div><span>Pressure</span><strong id="signal-pressure">—</strong></div></div>
+          <div id="signal-plan" class="signal-plan"></div><div id="signal-movements" class="movement-list"></div>
+        </div>
+      </section>
+    </aside>
+
+  </main>
+  <script src="/height-slice.js"></script>
+  <script src="/metro-route.js"></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>

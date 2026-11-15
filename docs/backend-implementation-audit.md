@@ -1,3 +1,7 @@
+> Historical audit: package ownership and metro fleet implementation have changed. See [current backend architecture](backend-architecture.md) and the current release validation record.
+
+> Superseded status audit: see [2026-11-15 current architecture review](architecture-review-2026-11-15.md). The historical findings below are not the current feature matrix.
+
 > Current geometry: see [Compact interchange revision](compact-interchanges.md).
 > Earlier dimensions below describe the previous layout.
 
@@ -30,14 +34,14 @@ boundaries does not require splitting the application into network microservices
 
 | Target area | Current status | Source and evidence | Remaining work |
 |---|---|---|---|
-| Rendering / calculation separation | Running | `internal/server/web`, `internal/server/server.go`, `desktop/backend.cjs`: browser renders snapshots; Go advances vehicles | Preserve this boundary; rendering should not own model state |
+| Rendering / calculation separation | Running | `frontend`, `internal/server/server.go`, `desktop/backend.cjs`: browser renders snapshots; Go advances vehicles | Preserve this boundary; rendering should not own model state |
 | Unified clock and event order | Partial | `foundation.Clock` is used by `road.Simulation`; execution order is explicit in `advanceSubstep` | Common fixed-step kernel and documented command/event priorities. Traffic advances one caller-sized step, while Taxi divides it into <= 0.05 s substeps |
 | Entity identity and state commit | Partial | Vehicle IDs and mutations are owned by Simulation; taxi proposals validate epoch/request before commit | Shared run-scoped entity IDs, command contracts and revision checks across modules; current IDs restart and the taxi epoch is not a universal entity version |
 | Events / randomness / replay | Partial | Bounded 2048-entry journal records taxi lifecycle/epoch events; car trips and taxi demand/cruising use seeded RNGs | Record commands, configuration, decisions, streams and durable run identity; checkpoints including RNG/policy state; deterministic replay. Current events are not a replay log |
 | Algorithm registration / versions / parameters | Partial, wired hooks | `road/policies.go`, `dispatch/dispatch.go`, `road/planners.go` | Unified capability registry and typed parameter schemas. Road profiles are aggregate native factories; infrastructure planner IDs have no implementation-version metadata. External manifest contract version is not algorithm-code version |
 | Independent algorithm processes | Running for taxi matching only | `dispatch/worker.go` runs one JSON request per process with deadline and output bounds | Reusable worker contracts for route, demand, signal, geometry and future metro decisions; cancellation and stale-result validation per capability. Native hooks have no enforced timeout and can block their caller |
 | Result validation / failure handling | Partial by capability | Assignment candidate/epoch checks, output decode limits; host checks finite costs/speeds, legal lanes, phase scores and valid planner output | Consistent diagnostics, fallback/rejection semantics, version matching and tests for every strategy type |
-| Fixed scenarios / multiple seeds / export | Running for taxi experiments | `cmd/taxi-lab` loops policies/seeds, exports JSON/CSV with map and engine hashes | Road/signal/metro experiments, scenario/run manifests, algorithm source hashes and versions, parameter sweeps, optional warmup and comparable metrics. Current runner calls `sim.New`, so it does not select road-policy profiles |
+| Fixed scenarios / multiple seeds / export | Running for taxi experiments | `cmd/experiment` loops policies/seeds, exports JSON/CSV with map and engine hashes | Road/signal/metro experiments, scenario/run manifests, algorithm source hashes and versions, parameter sweeps, optional warmup and comparable metrics. Current runner calls `sim.New`, so it does not select road-policy profiles |
 | Road graph | Running | `infrastructure/road` reads, validates and builds directed roads and lane connectors | Explicit physical-unit contract and revisioned immutable topology; demand/network expansion is separate |
 | Interchange hierarchy and internal paths | Running | `interchange/routing.go`, `road/routing.go`: macro transfer search expands actual entry/exit lanes; no road-only runtime fallback | Optional batch-level transfer reuse, route diagnostics and richer cost models. Caching is an optimization, not a missing hierarchy implementation |
 | Interchange geometry / topology generation | Partial | Python cloverleaf and trumpet compilers generate runnable maps; Go planner callback is invoked by BuildGraph | Engineering scale, curvature/grade/clearance validation, complete profile plumbing and other templates. Several profile fields are still ignored by generation; see scale review below |
@@ -61,7 +65,7 @@ boundaries does not require splitting the application into network microservices
 
 These are observations from production references, not guesses from folder names:
 
-- No production imports/calls connect `internal/metro`,
+- No production imports/calls connect `internal/metro_scheduling`,
   `internal/infrastructure/metro` or `internal/operations/demand` to the runtime.
   Their helpers/interfaces cannot currently produce passengers or train motion.
 - The broad road Strategies profile is real code integration, but most hooks are
@@ -72,7 +76,7 @@ These are observations from production references, not guesses from folder names
   the executable when new code is registered. The desktop launcher does not pass
   a custom road-profile choice; the backend CLI can do so.
 - The new taxi domain package does not yet own the running lifecycle. That logic
-  remains coupled to physical agents, demand and matching in `internal/road/taxi.go`.
+  remains coupled to physical agents, demand and matching in `internal/road_scheduling/taxi.go`.
 - Existing deterministic seeds support comparable reruns; they do not provide
   exact checkpoint restore, arbitrary replay or recorded external-policy outputs.
 - Current tests prove supported routes and business rules. They do not certify

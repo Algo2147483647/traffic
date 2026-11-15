@@ -1,0 +1,4 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const context={};require('node:vm').runInNewContext(fs.readFileSync(path.join(__dirname,'../../frontend/height-slice.js'),'utf8'),context);const interval=context.HeightSlice.interval;
+test('physical ramp clipping uses the actual smooth elevation profile',()=>{for(const [a,b] of [[0,6.5],[6.5,0],[0,-6.5],[-6.5,0]]){const lo=Math.min(a,b)+1,hi=Math.max(a,b)-1,r=interval(a,b,[lo,hi]);assert.ok(r);const height=t=>a+(b-a)*t*t*(3-2*t);assert.ok(Math.abs(height(r[0])-(a<b?lo:hi))<1e-8);assert.ok(Math.abs(height(r[1])-(a<b?hi:lo))<1e-8);}});
+test('height slices include boundaries and exclude other altitudes',()=>{assert.ok(interval(-65,-65,[-65,-64]));assert.equal(interval(-71.5,-71.5,[-65,-64]),null);assert.equal(interval(0,6.5,[-65,-64]),null);assert.equal(interval(0,6.5,[7,9]),null);});

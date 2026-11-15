@@ -115,7 +115,7 @@ def locate(points,c,target):
         if dist<best[0]:best=(dist,c[i]+t*math.sqrt(den))
     return best[1] % c[-1]
 for line in metro['lines']:
-    line['layer']=p['metro_first_layer']-line['id']
+    line['elevation_m']=p['metro_first_elevation_m']-line['id']*p['metro_elevation_spacing_m'];line.pop('layer',None)
     old=line['stations'];ox,oy=old[len(old)//2]['x'],old[len(old)//2]['y']
     dx,dy=old[-1]['x']-ox,old[-1]['y']-oy;length=math.hypot(dx,dy);ux,uy=dx/length,dy/length
     scale=p['metro_axis_radius_m']/length
@@ -133,9 +133,9 @@ routes=[];chains=[]
 for direction,radius in [(1,R+half),(-1,R-half)]:
     pts=[dict(x=cx+radius*math.cos(direction*2*math.pi*i/count),y=cy+radius*math.sin(direction*2*math.pi*i/count)) for i in range(count+1)]
     routes.append(pts);chains.append(chain(pts))
-ring=dict(id=3,name='Orbital Line',layer=p['metro_ring_layer'],circular=True,stations=[dict(x=cx+R*math.cos(i*math.pi/3),y=cy+R*math.sin(i*math.pi/3)) for i in range(6)],route=routes[0],reverse_route=routes[1],stop_chainages=[[chains[0][i*count//6],chains[1][((6-i)%6)*count//6]] for i in range(6)],crossing_station=-1,loop_speed_kmh=300)
+ring=dict(id=3,name='Orbital Line',elevation_m=p['metro_ring_elevation_m'],circular=True,stations=[dict(x=cx+R*math.cos(i*math.pi/3),y=cy+R*math.sin(i*math.pi/3)) for i in range(6)],route=routes[0],reverse_route=routes[1],stop_chainages=[[chains[0][i*count//6],chains[1][((6-i)%6)*count//6]] for i in range(6)],crossing_station=-1,loop_speed_kmh=300)
 metro['lines'].append(ring)
-metro['highest_layer']=p['metro_first_layer']
+metro.pop('highest_layer',None)
 metro['transfers']=[]
 for i,station in enumerate(ring['stations']):
     for line in metro['lines'][:3]:

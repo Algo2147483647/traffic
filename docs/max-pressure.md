@@ -109,11 +109,11 @@ both by the same scaled delta.
 
 ## Validation
 
-`internal/road/max_pressure_test.go` covers full phase evaluation, exact
+`internal/road_scheduling/max_pressure_test.go` covers full phase evaluation, exact
 lane-connection targets, target-lane demand, incoming and outgoing terms, a
 demand shift, downstream congestion, deterministic ties, maximum-red fairness,
 empty/invalid input, and application of the new
-maximum at an actual signal decision boundary. `internal/road/simulation_test.go`
+maximum at an actual signal decision boundary. `internal/road_scheduling/simulation_test.go`
 retains the seeded fixed-time/adaptive comparison, active-phase connector, and
 green-bound behavior tests. `internal/infrastructure/road/graph_test.go` verifies maximal safe
 movement sets for representative four-way and three-way junctions.

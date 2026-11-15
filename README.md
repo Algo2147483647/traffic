@@ -422,9 +422,9 @@ cmd/traffic-observe/         real-time congestion observer and JSON report
 configs/                     primary JSON city input
 example/             auto-discovered JSON map presets
 internal/infrastructure/road/              graph, intersection, segment, and matrix model
-internal/road/                spawning, walking, driving, queuing, snapshots
+internal/road_scheduling/                spawning, walking, driving, queuing, snapshots
 internal/server/             HTTP/SSE API and embedded HTML UI
-internal/server/web/         standalone HTML, CSS, and canvas renderer
+frontend/         standalone HTML, CSS, and canvas renderer
 app/                         publishable visualization surface
 ```
 

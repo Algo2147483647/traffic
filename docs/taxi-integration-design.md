@@ -26,8 +26,8 @@ undirected router. Algorithm code proposes assignments; only the host commits th
 | backend/app/dispatch/{nearest_driver,fifo,greedy,hungarian,batch,score_based}.py | Baseline behavior | Port to Go or run in isolated experimental worker; compare on identical inputs |
 | backend/app/simulation/engine.py | Cancellation, supply changes, relocation, counters | All transitions driven by traffic's actual arrival events |
 | backend/app/simulation/benchmark.py | Seeded scenario comparison | Fixed demand tapes, multiple seeds, resource budgets, failure accounting |
-| traffic/internal/road/simulation.go | Clock, following, lane changes and turning | Extract shared road-agent movement; attach taxi task completion |
-| traffic/internal/road/routing.go | Lane-valid route search and occupancy costs | Current-position routing and calibrated time estimates |
+| traffic/internal/road_scheduling/simulation.go | Clock, following, lane changes and turning | Extract shared road-agent movement; attach taxi task completion |
+| traffic/internal/road_scheduling/routing.go | Lane-valid route search and occupancy costs | Current-position routing and calibrated time estimates |
 | traffic/internal/infrastructure/road/types.go | Directed roads, elevation, access flags, kilometer scale | Stop and demand-zone definitions |
 | traffic/internal/server/server.go and web/ | API, stream, canvas and floating UI | Taxi commands, views, metrics and experiment controls |
 
@@ -66,10 +66,10 @@ internal/mobility/domain/       orders, taxis, stops, tasks, events
 internal/mobility/demand/       zones, demand tapes, independent RNG
 internal/mobility/fleet/        lifecycle, supply changes, relocation
 internal/mobility/routing/      current-position routes, candidate/ETA estimates
-internal/dispatch/             versioned contract, registry, proposal validator
-internal/dispatch/builtin/     deterministic native baselines
-internal/dispatch/worker/      framed protocol, deadlines, process lifecycle
-internal/experiments/           isolated runs, replay, metrics, exports
+internal/operations/taxi/dispatch/             versioned contract, registry, proposal validator
+internal/operations/taxi/dispatch/builtin/     deterministic native baselines
+internal/operations/taxi/dispatch/worker/      framed protocol, deadlines, process lifecycle
+internal/algorithms/experiments/           isolated runs, replay, metrics, exports
 experiments/dispatch/           trusted local experimental policy source
 configs/taxi/                  scenarios, stop/zone definitions, worker manifests
 ```
@@ -231,7 +231,7 @@ routes rather than rejecting every reply merely because vehicles have moved.
 
 Two supported extension paths:
 
-- Native Go: add a package under internal/dispatch/builtin or an experimental Go
+- Native Go: add a package under internal/operations/taxi/dispatch/builtin or an experimental Go
   package, implement the value contract, and register its factory in one bootstrap
   file. Rebuild the same executable. No policy-specific branches in simulation.
 - External worker: add a manifest and executable/script under experiments/dispatch;

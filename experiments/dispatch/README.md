@@ -55,7 +55,7 @@ fields. Native code is trusted/cooperative; use a process worker for hard deadli
 Reproducible paired runs from the project root:
 
 ```powershell
-go run ./cmd/taxi-lab -algorithms nearest,hungarian,experimental.wait_balanced -seeds 71429,71430,71431 -duration 600 -output desktop/runtime/taxi-comparison
+go run ./cmd/experiment -algorithms nearest,hungarian,experimental.wait_balanced -seeds 71429,71430,71431 -duration 600 -output desktop/runtime/taxi-comparison
 ```
 
 This launches a separate experiment program and leaves the interactive scenario

@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	model "traffic/internal/infrastructure/road"
-	sim "traffic/internal/road"
+	sim "traffic/internal/simulation"
 )
 
 func testHandler(t *testing.T) http.Handler {
@@ -30,7 +30,7 @@ func testHandler(t *testing.T) http.Handler {
 
 func TestCityAndStaticEndpoints(t *testing.T) {
 	handler := testHandler(t)
-	for _, path := range []string{"/", "/styles.css", "/app.js", "/api/city", "/api/presets", "/api/snapshot", "/api/health"} {
+	for _, path := range []string{"/", "/styles.css", "/app.js", "/metro-route.js", "/height-slice.js", "/api/city", "/api/presets", "/api/snapshot", "/api/health"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
@@ -52,11 +52,8 @@ func TestCityAndStaticEndpoints(t *testing.T) {
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	html := response.Body.String()
-	if !strings.Contains(html, `<option value="10">10×</option>`) || !strings.Contains(html, `id="safe-gap-control" type="range" min="2" max="10" step="0.5" value="2.5"`) ||
-		!strings.Contains(html, `id="map-preset"`) || !strings.Contains(html, `id="compute-rate"`) ||
-		!strings.Contains(html, `id="population-control" type="range" min="20" max="2000"`) ||
-		!strings.Contains(html, `id="max-population-control" type="range" min="100" max="2000"`) {
-		t.Fatal("dashboard does not expose map presets, 10x rate, 2.5m spacing, 2,000 people, and compute frequency")
+	if !strings.Contains(html, `id="time-scale" type="number"`) || !strings.Contains(html, `id="height-min"`) || !strings.Contains(html, `id="height-max"`) || !strings.Contains(html, `id="safe-gap-control" type="number"`) || !strings.Contains(html, `id="population-control" type="number"`) {
+		t.Fatal("missing editable settings or metric height slice")
 	}
 	request = httptest.NewRequest(http.MethodGet, "/app.js", nil)
 	response = httptest.NewRecorder()
@@ -149,20 +146,20 @@ func TestControlTrafficLoad(t *testing.T) {
 	}
 }
 
-func TestControlTrafficLoadAllowsTenThousand(t *testing.T) {
+func TestControlTrafficLoadAllowsTypedCapacity(t *testing.T) {
 	handler := testHandler(t)
-	request := httptest.NewRequest(http.MethodPost, "/api/control", bytes.NewBufferString(`{"action":"set_load","population":2,"spawn_rate_per_second":0,"max_population":10000}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/control", bytes.NewBufferString(`{"action":"set_load","population":2,"spawn_rate_per_second":0,"max_population":15000}`))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("POST 10,000 population cap = %d: %s", response.Code, response.Body.String())
 	}
 
-	request = httptest.NewRequest(http.MethodPost, "/api/control", bytes.NewBufferString(`{"action":"set_load","population":10001,"spawn_rate_per_second":0,"max_population":10001}`))
+	request = httptest.NewRequest(http.MethodPost, "/api/control", bytes.NewBufferString(`{"action":"set_load","population":2,"spawn_rate_per_second":0,"max_population":1}`))
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
-		t.Fatalf("POST population above 10,000 = %d, want %d", response.Code, http.StatusBadRequest)
+		t.Fatalf("POST capacity below population = %d, want %d", response.Code, http.StatusBadRequest)
 	}
 }
 
@@ -184,9 +181,9 @@ func TestControlVehicleSpacing(t *testing.T) {
 	}
 }
 
-func TestControlSupportsTenTimesSpeed(t *testing.T) {
+func TestControlSupportsTypedSpeed(t *testing.T) {
 	handler := testHandler(t)
-	body := bytes.NewBufferString(`{"action":"set_time_scale","time_scale":10}`)
+	body := bytes.NewBufferString(`{"action":"set_time_scale","time_scale":12.5}`)
 	request := httptest.NewRequest(http.MethodPost, "/api/control", body)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -197,16 +194,16 @@ func TestControlSupportsTenTimesSpeed(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &snapshot); err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.TimeScale != 10 {
+	if snapshot.TimeScale != 12.5 {
 		t.Fatalf("time scale = %v, want 10", snapshot.TimeScale)
 	}
 
-	body = bytes.NewBufferString(`{"action":"set_time_scale","time_scale":10.1}`)
+	body = bytes.NewBufferString(`{"action":"set_time_scale","time_scale":0}`)
 	request = httptest.NewRequest(http.MethodPost, "/api/control", body)
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest {
-		t.Fatalf("POST time scale above 10x = %d, want %d", response.Code, http.StatusBadRequest)
+		t.Fatalf("POST nonpositive time scale = %d, want %d", response.Code, http.StatusBadRequest)
 	}
 }
 

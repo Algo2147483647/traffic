@@ -48,7 +48,7 @@ commands already due; simulation time does not advance to reach future commands.
 
 Supported kinds: `pause`, `resume`, `reset`, `set_time_scale`, `set_spacing`,
 `set_load`, `set_mode`, `set_taxi_load`. Values and mode configuration use the fields
-of `internal/road.Command`. Unsupported kinds and nonfinite inputs are rejected.
+of `internal/road_scheduling.Command`. Unsupported kinds and nonfinite inputs are rejected.
 The existing preset endpoint supplies validated immutable graph replacements.
 
 ## Tick and arrival ordering

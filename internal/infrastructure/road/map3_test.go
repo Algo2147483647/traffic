@@ -89,7 +89,7 @@ func TestMap3CornerEntriesAndUndergroundSeparation(t *testing.T) {
 	for _, w := range g.Ways {
 		if w.Structure == "tunnel" {
 			tunnels++
-			if w.StartLayer != -1 || w.EndLayer != -1 || w.StartElevation != -6.5 || w.EndElevation != -6.5 {
+			if w.StartLayer != -1 || w.EndLayer != -1 || w.StartElevation != -5 || w.EndElevation != -5 {
 				t.Fatal("wrong tunnel layer")
 			}
 		}

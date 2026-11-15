@@ -31,13 +31,13 @@ func TestFourCellInterchanges(t *testing.T) {
 	for _, w := range g.Ways {
 		if w.Structure == "bridge" {
 			bridges++
-			if w.StartElevation != 6.5 || w.EndElevation != 6.5 {
+			if w.StartElevation != 5 || w.EndElevation != 5 {
 				t.Fatal("invalid deck")
 			}
 		}
 		if w.Structure == "ramp" {
 			ramps++
-			if d := math.Abs(w.StartElevation - w.EndElevation); d != 6.5 && !(d == 0 && w.Role == "right_ramp") {
+			if d := math.Abs(w.StartElevation - w.EndElevation); d != 5 && !(d == 0 && w.Role == "right_ramp") {
 				t.Fatal("invalid ramp")
 			}
 		}
