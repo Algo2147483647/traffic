@@ -116,7 +116,7 @@ func newServer(simulation *sim.Simulation, logger *slog.Logger, current string, 
 	mux.HandleFunc("GET /api/snapshot", server.snapshot)
 	mux.HandleFunc("GET /api/stream", server.stream)
 	mux.HandleFunc("POST /api/control", server.control)
-	static, err := fs.Sub(webFiles, ".")
+	static, err := fs.Sub(webFiles, "dist")
 	if err != nil {
 		panic(err)
 	}

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -30,7 +31,7 @@ func testHandler(t *testing.T) http.Handler {
 
 func TestCityAndStaticEndpoints(t *testing.T) {
 	handler := testHandler(t)
-	for _, path := range []string{"/", "/styles.css", "/app.js", "/metro-route.js", "/height-slice.js", "/api/city", "/api/presets", "/api/snapshot", "/api/health"} {
+	for _, path := range []string{"/", "/api/city", "/api/presets", "/api/snapshot", "/api/health"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
@@ -52,15 +53,24 @@ func TestCityAndStaticEndpoints(t *testing.T) {
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	html := response.Body.String()
-	if !strings.Contains(html, `id="time-scale" type="number"`) || !strings.Contains(html, `id="height-min"`) || !strings.Contains(html, `id="height-max"`) || !strings.Contains(html, `id="safe-gap-control" type="number"`) || !strings.Contains(html, `id="population-control" type="number"`) {
-		t.Fatal("missing editable settings or metric height slice")
+	if !strings.Contains(html, `id="root"`) {
+		t.Fatal("missing React mount point")
 	}
-	request = httptest.NewRequest(http.MethodGet, "/app.js", nil)
-	response = httptest.NewRecorder()
-	handler.ServeHTTP(response, request)
-	if script := response.Body.String(); !strings.Contains(script, "bezierCurveTo") || !strings.Contains(script, "updateComputeRate") {
-		t.Fatal("dashboard script does not draw Bezier roads or measure compute frequency")
+	assets := regexp.MustCompile(`(?:src|href)="(/assets/[^" ]+)"`).FindAllStringSubmatch(html, -1)
+	if len(assets) < 2 {
+		t.Fatal("missing production JavaScript and stylesheet")
 	}
+	for _, asset := range assets {
+		response = httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, asset[1], nil))
+		if response.Code != http.StatusOK || response.Body.Len() == 0 {
+			t.Fatalf("GET %s = %d, empty=%v", asset[1], response.Code, response.Body.Len() == 0)
+		}
+		if strings.HasSuffix(asset[1], ".js") && !strings.Contains(response.Body.String(), "bezierCurveTo") {
+			t.Fatal("missing Canvas renderer in production bundle")
+		}
+	}
+
 }
 
 func TestMapPresetSwitch(t *testing.T) {

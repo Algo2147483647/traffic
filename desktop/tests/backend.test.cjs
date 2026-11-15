@@ -20,7 +20,7 @@ test('bundled engine authenticates, simulates, switches presets, streams, and ex
   assert.equal((await get('/api/health')).status, 'ok');
   const html = await fetch(backend.url, { headers });
   assert.match(html.headers.get('content-security-policy'), /frame-ancestors 'none'/);
-  assert.match(await html.text(), /city-canvas/);
+  assert.match(await html.text(), /id="root"/);
   await control({ action: 'pause' });
   const paused = await get('/api/snapshot');
   assert.equal(paused.paused, true);

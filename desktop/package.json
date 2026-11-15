@@ -27,7 +27,8 @@
     "asar": true,
     "files": [
       "main.cjs",
-      "backend.cjs"
+      "backend.cjs",
+      "react-smoke.cjs"
     ],
     "beforePack": "scripts/before-pack.cjs",
     "directories": {

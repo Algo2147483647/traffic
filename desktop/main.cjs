@@ -24,30 +24,30 @@ async function createWindow() {
   window.once('ready-to-show', () => window.show());
   await window.loadURL(backend.url + '/');
   if (smoke) {
-    const result = await window.webContents.executeJavaScript(`(async () => {
+    const result = await window.webContents.executeJavaScript(process.env.TRAFFIC_SMOKE_FOCUS === "react" ? `(${require("./react-smoke.cjs").toString()})()` : `(async () => {
       const drawnLabels=[];const originalFillText=CanvasRenderingContext2D.prototype.fillText;CanvasRenderingContext2D.prototype.fillText=function(text,...args){if(drawnLabels.length>2000)drawnLabels.splice(0,1000);drawnLabels.push(String(text));return originalFillText.call(this,text,...args);};
       const errors=[];window.addEventListener('error',event=>errors.push(event.message));
       const wait = ms => new Promise(r => setTimeout(r, ms));
-      for (let i = 0; i < 100 && document.querySelector('#map-preset').options[0]?.value !== "preset-1"; i++) await wait(100);
-      if (document.querySelector('#map-preset').options[0]?.value !== "preset-1") throw Error('Map selector did not load');
+      for (let i = 0; i < 100 && document.querySelector('#map-preset')?.options[0]?.value !== "preset-1"; i++) await wait(100);
+      if (document.querySelector('#map-preset')?.options[0]?.value !== "preset-1") throw Error('Map selector did not load');
       const coordinates=document.querySelector('#show-coordinates');
       if(!coordinates.checked)coordinates.click();
       const get = p => fetch(p).then(r => r.json());
       const control = body => fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => { if (!r.ok) throw Error('Control failed'); return r.json(); });
       const preset = ${JSON.stringify(process.env.TRAFFIC_SMOKE_PRESET || '')};
       if (preset) { await control({action:'set_preset',preset_id:preset}); await wait(800); }
-      function sliceHeight(lo,hi,all=false){document.querySelector('#height-min').value=String(lo);document.querySelector('#height-max').value=String(hi);const select=document.querySelector('#layer-filter');select.value=all?'all':'slice';select.dispatchEvent(new Event('change'));}
+      function sliceHeight(lo,hi,all=false){document.querySelector('#height-min').value=String(lo);document.querySelector('#height-max').value=String(hi);const select=document.querySelector('#layer-filter');select.value=all?'all':'slice';select.dispatchEvent(new Event('change',{bubbles:true}));}
       if (${JSON.stringify(process.env.TRAFFIC_SMOKE_FOCUS === 'heights')}) {
         await control({action:'pause'});document.querySelector('#settings-toggle').click();
         let snap=await get('/api/snapshot');const city=await get('/api/city');
         if(snap.metro.lines.map(l=>l.elevation_m).join(',')!=='-50,-55,-60,-65'||!city.ways.some(w=>w.structure==='bridge'&&w.start_elevation===5)||!city.ways.some(w=>w.structure==='tunnel'&&w.start_elevation===-5))throw Error('Physical material migration failed');
         sliceHeight(-51,-49);drawnLabels.length=0;document.querySelector('#fit-button').click();await wait(120);
         const trains=drawnLabels.filter(t=>/^T[0-9]+ /.test(t));if(!trains.length||trains.some(t=>Number(t.match(/^T([0-9]+)/)[1])>=100))throw Error('Height slice mixed metro elevations: '+JSON.stringify(trains));
-        document.querySelector('#height-min').value='10';document.querySelector('#height-min').dispatchEvent(new Event('change'));if(!document.querySelector('#height-feedback').textContent)throw Error('Invalid range was accepted');sliceHeight(-51,-49);
+        document.querySelector('#height-min').value='10';document.querySelector('#height-min').dispatchEvent(new Event('change',{bubbles:true}));if(!document.querySelector('#height-feedback').textContent)throw Error('Invalid range was accepted');sliceHeight(-51,-49);
         const input=document.querySelector('#metro-levels input');input.value='-52.25';document.querySelector('#metro-speed').value='350';document.querySelector('#metro-headway').value='15';document.querySelector('#metro-cars').value='13';document.querySelector('#metro-dwell').value='2';document.querySelector('#metro-apply').click();
         for(let i=0;i<50;i++){snap=await get('/api/snapshot');if(snap.metro.lines[0].elevation_m===-52.25)break;await wait(40);}
         if(snap.metro.lines[0].elevation_m!==-52.25||snap.metro.config.max_speed_kmh!==350||snap.metro.config.headway_s!==15||snap.metro.config.cars!==13)throw Error('Editable settings not applied');
-        for(const [id,value] of [['walk-speed-control','4.2'],['time-scale','12'],['safe-gap-control','1.5']]){const e=document.querySelector('#'+id);e.value=value;e.dispatchEvent(new Event('change'));await wait(100);}
+        for(const [id,value] of [['walk-speed-control','4.2'],['time-scale','12'],['safe-gap-control','1.5']]){const e=document.querySelector('#'+id);e.value=value;e.dispatchEvent(new Event('change',{bubbles:true}));await wait(100);}
         snap=await get('/api/snapshot');if(snap.walk_speed_mps!==4.2||snap.time_scale!==12)throw Error('Numeric control still clamped');
         sliceHeight(-53,-52);document.querySelector('#metro-settings').scrollIntoView({block:'start'});await wait(100);if(errors.length)throw Error(errors.join('; '));
         return {heights:snap.metro.lines.map(l=>l.elevation_m),speed:snap.metro.config.max_speed_kmh,cars:snap.metro.config.cars,walk:snap.walk_speed_mps,rate:snap.time_scale};
@@ -68,7 +68,7 @@ async function createWindow() {
       }
       async function checkExchangeInspector() {
         document.querySelector('#settings-panel').hidden=true;
-        const selector=document.querySelector('#layer-filter');selector.value='all';selector.dispatchEvent(new Event('change'));
+        const selector=document.querySelector('#layer-filter');selector.value='all';selector.dispatchEvent(new Event('change',{bubbles:true}));
         const positions=new Map(),savedText=CanvasRenderingContext2D.prototype.fillText;
         CanvasRenderingContext2D.prototype.fillText=function(text,x,y,...args){if(String(text).startsWith('Exchange '))positions.set(String(text).split(' / ')[0],{x:x-8,y:y+10});return savedText.call(this,text,x,y,...args);};
         document.querySelector('#fit-button').click();document.querySelector('#zoom-in-button').click();await wait(150);
@@ -84,11 +84,11 @@ async function createWindow() {
         if(count&&(!document.querySelector('#metro-passenger-select').options.length||!document.querySelector('#metro-passenger-path li.current-step')))throw Error('Passenger itinerary missing');
         if(!document.querySelector('#metro-platforms').textContent.includes('waiting'))throw Error('Queue status missing');
         const passengers=document.querySelector('#metro-passenger-select'),walking=[...passengers.options].find(o=>o.textContent.includes('transferring'));
-        if(walking){passengers.value=walking.value;passengers.dispatchEvent(new Event('change'));await wait(100);if(!document.querySelector('#metro-passenger-path .current-step').textContent.includes('Transfer at')||!document.querySelector('#metro-passenger-state').textContent.includes('walk remaining'))throw Error('Selected transfer path missing');}
+        if(walking){passengers.value=walking.value;passengers.dispatchEvent(new Event('change',{bubbles:true}));await wait(100);if(!document.querySelector('#metro-passenger-path .current-step').textContent.includes('Transfer at')||!document.querySelector('#metro-passenger-state').textContent.includes('walk remaining'))throw Error('Selected transfer path missing');}
 
         const routeStrokes=[],originalStroke=CanvasRenderingContext2D.prototype.stroke;
         CanvasRenderingContext2D.prototype.stroke=function(...args){if(['#8eabbc','#f5ce58','#8dbdff'].includes(this.strokeStyle))routeStrokes.push({color:this.strokeStyle,dash:this.getLineDash()});return originalStroke.apply(this,args);};
-        passengers.dispatchEvent(new Event('change'));await wait(100);
+        passengers.dispatchEvent(new Event('change',{bubbles:true}));await wait(100);
         if(document.querySelector('#metro-route-legend').hidden||!routeStrokes.some(s=>s.color==='#f5ce58')||!routeStrokes.some(s=>s.color==='#8dbdff'&&s.dash.length))throw Error('Passenger map route styles missing');
         if(walking){const selected=passengers.value;await control({action:'step',delta:64});await wait(150);if(passengers.value!==selected||!routeStrokes.some(s=>s.color==='#8eabbc'))throw Error('Route tracking or completed segment missing: '+JSON.stringify({selected,actual:passengers.value,steps:document.querySelector('#metro-passenger-path').textContent,colors:routeStrokes.map(s=>s.color)}));}
         CanvasRenderingContext2D.prototype.stroke=originalStroke;
@@ -116,10 +116,10 @@ async function createWindow() {
       await control({action:'pause'});
       const spawn=document.querySelector('#spawn-rate-control'),gap=document.querySelector('#safe-gap-control');
       if(gap.value!=='2.5'||gap.type!=='number'||document.querySelector('#taxi-fleet').value!=='32'||document.querySelector('#taxi-demand').value!=='2')throw Error('Settings defaults not calibrated');
-      spawn.value='30';spawn.dispatchEvent(new Event('input'));document.querySelector('#apply-load-button').click();
+      spawn.value='30';spawn.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#apply-load-button').click();
       for(let i=0;i<50&&(await get('/api/snapshot')).load.spawn_rate_per_second!==0.5;i++)await wait(50);
       if((await get('/api/snapshot')).load.spawn_rate_per_second!==0.5)throw Error('Per-minute demand conversion failed');
-      spawn.value='0';spawn.dispatchEvent(new Event('input'));document.querySelector('#apply-load-button').click();
+      spawn.value='0';spawn.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#apply-load-button').click();
       for(let i=0;i<50&&(await get('/api/snapshot')).load.spawn_rate_per_second!==0;i++)await wait(50);
       if((await get('/api/snapshot')).load.spawn_rate_per_second!==0)throw Error('Demand reset failed');
 
@@ -159,7 +159,7 @@ async function createWindow() {
           if(document.querySelector('#interchange-inspector').hidden)throw Error('Interchange details did not open: '+group.id);
           const movements=document.querySelector('#interchange-movement');
           if(movements.options.length!==group.routes.length)throw Error('Missing interchange movements: '+group.id);
-          for(let i=0;i<group.routes.length;i++){movements.value=String(i);movements.dispatchEvent(new Event('change'));}
+          for(let i=0;i<group.routes.length;i++){movements.value=String(i);movements.dispatchEvent(new Event('change',{bubbles:true}));}
         }
         document.querySelector("#inspector-toggle").click();await wait(100);
       }
@@ -171,7 +171,7 @@ async function createWindow() {
       if(!coordinates.checked||!drawnLabels.includes('X · km')||!drawnLabels.includes('Y · km'))throw Error('Coordinates did not restore');
       if (${JSON.stringify(process.env.TRAFFIC_SMOKE_TAXI === '1')}) {
         document.querySelector('#taxi-fleet').value='6';document.querySelector('#taxi-demand').value='0';
-        document.querySelector('#simulation-mode').value='taxi';document.querySelector('#simulation-mode').dispatchEvent(new Event('change'));
+        document.querySelector('#simulation-mode').value='taxi';document.querySelector('#simulation-mode').dispatchEvent(new Event('change',{bubbles:true}));
         for(let i=0;i<50&&(await get('/api/snapshot')).mode!=='taxi';i++)await wait(100);
         let snap=await get('/api/snapshot');if(snap.mode!=='taxi'||snap.taxi.vehicles.length!==6)throw Error('Taxi mode did not start');
         await control({action:'pause'});
@@ -182,8 +182,8 @@ async function createWindow() {
         if(!planned.length||planned.some(p=>p.route_entry_lanes?.length!==p.route.length||p.route_exit_lanes?.length!==p.route.length))throw Error('Missing expanded lane paths');
         taxiResult.expandedLaneRoutes=planned.length;
         const liveTime=snap.time,liveCreated=snap.taxi.created;
-        document.querySelector('#taxi-fleet-range').value='9';document.querySelector('#taxi-fleet-range').dispatchEvent(new Event('input'));
-        document.querySelector('#taxi-demand-range').value='15';document.querySelector('#taxi-demand-range').dispatchEvent(new Event('input'));
+        document.querySelector('#taxi-fleet-range').value='9';document.querySelector('#taxi-fleet-range').dispatchEvent(new Event('input',{bubbles:true}));
+        document.querySelector('#taxi-demand-range').value='15';document.querySelector('#taxi-demand-range').dispatchEvent(new Event('input',{bubbles:true}));
         document.querySelector('#taxi-load-apply').click();
         for(let i=0;i<40;i++){snap=await get('/api/snapshot');if(snap.taxi.config.fleet===9)break;await wait(50);}
         if(snap.taxi.config.fleet!==9||snap.taxi.config.orders_per_minute!==15||snap.taxi.vehicles.length!==9)throw Error('Live taxi controls failed');
@@ -262,7 +262,7 @@ async function createWindow() {
       }
       if (${JSON.stringify(process.env.TRAFFIC_SMOKE_FOCUS === 'overview')}) {
         document.querySelector('#settings-panel').hidden=true;
-        const selector=document.querySelector('#layer-filter');selector.value='all';selector.dispatchEvent(new Event('change'));
+        const selector=document.querySelector('#layer-filter');selector.value='all';selector.dispatchEvent(new Event('change',{bubbles:true}));
         document.querySelector('#fit-button').click();document.querySelector('#zoom-in-button').click();document.querySelector('#zoom-in-button').click();await wait(150);
       }
       if(preset==='radial-grid-cloverleaf')await checkExchangeInspector();

@@ -17,7 +17,7 @@ Status: implemented package-boundary refactor, 2026-11-15. This document superse
 - `operations/taxi` owns order/vehicle lifecycle and acceptance eligibility. `operations/taxi/dispatch` owns matching contracts, policies and proposal validation. Taxi route/admission adapters remain next to physical road agents because they must check real lane storage and arrival state.
 - `algorithms/executor` is the single bounded external process implementation used by both generic algorithms and taxi dispatch. Domain adapters retain their existing JSON contracts and host validation. Desktop secrets are filtered from subprocess environments.
 - `algorithms/experiments` takes an injected session factory and observations; it has no simulation/server/executor imports. `app/experiments.go` supplies the real world adapter. Current exported experiment metrics remain taxi-oriented; this refactor does not invent a complete multi-domain statistics platform.
-- `frontend` embeds HTML/CSS/JS independently; `server` serves it and translates commands. Renderer code never computes traffic physics.
+- `frontend` is React + TypeScript + Canvas. Vite builds `frontend/dist`, which Go embeds; `server` serves it and translates commands. See `frontend-architecture.md`. Rendering never computes traffic physics.
 
 Dependency direction:
 
@@ -125,3 +125,7 @@ The earlier recommended filenames are responsibility boundaries, not a requireme
 ## Validation
 
 The final release runs Go tests/vet, desktop backend/frontend-helper tests, packaged fleet and transfer smoke scenarios, and executable runtime identity checks. Results are recorded in `refactor-validation-2026-11-15.md` after execution.
+
+## Frontend build dependency
+
+Desktop build runs API type generation, TypeScript checking and Vite before compiling the embedded backend. The frontend source and generated output are separate. See [frontend architecture](frontend-architecture.md).

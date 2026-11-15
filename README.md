@@ -459,3 +459,7 @@ Preset folders are loaded from lowercase `example/`. Each folder contains
 profile and generator inputs in JSON. Both the CLI and unpacked desktop read these
 files at startup. See [example layouts](docs/example-layouts.md) for physical units,
 terminal circuits, layers and acceptance checks.
+
+## React desktop frontend
+
+The active desktop UI is `frontend/src` (React + TypeScript + Canvas). Run `npm run frontend:build` before direct Go builds. Desktop packaging performs this step automatically. See [frontend architecture](docs/frontend-architecture.md) for component, rendering, interaction-state and API boundaries.

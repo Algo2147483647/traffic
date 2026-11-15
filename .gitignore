@@ -55,3 +55,6 @@ yarn-error.log*
 
 # Geometry compiler cache
 /scripts/**/__pycache__/
+
+# Compiled React frontend (rebuilt before embedding)
+/frontend/dist/
