@@ -68,4 +68,13 @@ No runtime CDN, browser-side simulation or separate production web server is req
 
 ## Regression coverage
 
-The desktop React smoke scenario uses actual DOM events, not store internals. It checks window movement/resize/maximize, configuration submission, map changes, height slices, mixed demand, live fleet controls, invalid JSON, timetable planning, interchange route previews, all-movement phase copies, station queues and passenger route inspection. Helper tests execute the TypeScript geometry sources directly. Results are recorded after the final validation run.
+The desktop React smoke scenario uses actual DOM events, not store internals. It checks window movement/resize/maximize, configuration submission, map changes, height slices, mixed demand, live fleet controls, invalid JSON, timetable planning, interchange route previews, all-movement phase copies, station queues and passenger route inspection. Helper tests execute the TypeScript geometry sources directly. The default `npm run smoke` executes this React scenario; the obsolete DOM-mutation smoke implementation has been removed.
+
+## Validation record (2026-11-15)
+
+- TypeScript check and Vite production build passed; production Go embeds the generated assets.
+- Go tests passed across the backend packages; static endpoint tests now discover and request the hashed JavaScript/CSS from the production HTML. `go vet ./...` passed.
+- All 7 desktop tests passed, including gesture pan/zoom/selection/teardown and the TypeScript height-slice and passenger-track helpers.
+- Development and packaged Electron React scenarios passed: three presets, editable settings, floating windows, timetable changes, live taxi fleet, mixed demand, interchange and phase previews, station inspector, passenger itinerary and conserved population. The inspected transfer scenario reported three transferring passengers and a four-step itinerary, with no captured page errors.
+- The fixed Windows executable was rebuilt in `desktop/dist/win-unpacked/Meridian Traffic.exe`. The production backend hash is checked against `desktop/runtime/win-x64/traffic.exe`.
+- Windows runtime was verified. macOS uses the same frontend build; no macOS desktop runtime was available for this validation.
